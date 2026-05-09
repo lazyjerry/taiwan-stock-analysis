@@ -11,6 +11,8 @@ from bs4 import BeautifulSoup
 import time
 import json
 import sys
+import argparse
+import urllib3
 
 
 # ─── 抓取層 ───────────────────────────────────────────────
@@ -23,14 +25,14 @@ def get_client_key():
     client_key = f"2.8|38057.1435627105|46946.0324515993|{tz_offset}|{days_adjusted}|{days_adjusted}"
     return client_key, days_adjusted
 
-def fetch_report(stock_id, rpt_cat, days_adjusted, client_key):
+def fetch_report(stock_id, rpt_cat, days_adjusted, client_key, verify_ssl=True):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://goodinfo.tw/'
     }
     cookies = {'CLIENT_KEY': client_key}
     url = f"https://goodinfo.tw/tw/StockFinDetail.asp?RPT_CAT={rpt_cat}&STOCK_ID={stock_id}&REINIT={days_adjusted:.10f}"
-    r = requests.get(url, headers=headers, cookies=cookies, timeout=15)
+    r = requests.get(url, headers=headers, cookies=cookies, timeout=15, verify=verify_ssl)
     r.encoding = 'utf-8'
     return BeautifulSoup(r.text, 'html.parser')
 
@@ -147,25 +149,29 @@ def sanity_check(metrics_by_year, years):
 
 # ─── 主流程 ───────────────────────────────────────────────
 
-def fetch_all(stock_id):
+def fetch_all(stock_id, verify_ssl=True):
     client_key, days_adjusted = get_client_key()
     result = {'stock_id': stock_id}
 
+    if not verify_ssl:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        print("⚠️  本次已停用 SSL 憑證驗證，僅建議用於本機 CA 異常排查")
+
     print(f"正在抓取 {stock_id} 損益表...")
-    is_soup = fetch_report(stock_id, 'IS_YEAR', days_adjusted, client_key)
+    is_soup = fetch_report(stock_id, 'IS_YEAR', days_adjusted, client_key, verify_ssl=verify_ssl)
     is_data, years = parse_table(is_soup)
     result['income_statement'] = is_data
     result['years'] = years
 
     time.sleep(1)
     print(f"正在抓取 {stock_id} 資產負債表...")
-    bs_soup = fetch_report(stock_id, 'BS_YEAR', days_adjusted, client_key)
+    bs_soup = fetch_report(stock_id, 'BS_YEAR', days_adjusted, client_key, verify_ssl=verify_ssl)
     bs_data, _ = parse_table(bs_soup)
     result['balance_sheet'] = bs_data
 
     time.sleep(1)
     print(f"正在抓取 {stock_id} 現金流量表...")
-    cf_soup = fetch_report(stock_id, 'CF_YEAR', days_adjusted, client_key)
+    cf_soup = fetch_report(stock_id, 'CF_YEAR', days_adjusted, client_key, verify_ssl=verify_ssl)
     cf_data, _ = parse_table(cf_soup)
     result['cash_flow'] = cf_data
 
@@ -203,8 +209,21 @@ def run_verification(result, metrics_by_year):
 
 
 if __name__ == '__main__':
-    stock_id = sys.argv[1] if len(sys.argv) > 1 else '2330'
-    data = fetch_all(stock_id)
+    import re
+    parser = argparse.ArgumentParser(description='抓取 Goodinfo 財報數據')
+    parser.add_argument('stock_id', nargs='?', default='2330', help='4 到 6 位數股票代碼')
+    parser.add_argument(
+        '--insecure',
+        action='store_true',
+        help='停用本次 HTTPS 憑證驗證，僅用於本機 CA 憑證異常時',
+    )
+    args = parser.parse_args()
+
+    raw = args.stock_id
+    if not re.fullmatch(r'\d{4,6}', raw):
+        sys.exit(f"錯誤：stock_id 必須為 4–6 位數字，收到：{raw!r}")
+    stock_id = raw
+    data = fetch_all(stock_id, verify_ssl=not args.insecure)
 
     is_d = data['income_statement']
     bs_d = data['balance_sheet']
