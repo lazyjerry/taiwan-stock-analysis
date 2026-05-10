@@ -208,6 +208,14 @@ def run_verification(result, metrics_by_year):
     return result
 
 
+def average_balance(current_value, previous_value):
+    if current_value is None:
+        return None
+    if previous_value is None:
+        return current_value
+    return (current_value + previous_value) / 2
+
+
 if __name__ == '__main__':
     import re
     parser = argparse.ArgumentParser(description='抓取 Goodinfo 財報數據')
@@ -235,16 +243,18 @@ if __name__ == '__main__':
         return table.get(key, {}).get(yr)
     def safe(a, b): return a / b * 100 if (a is not None and b) else None
 
+    rev_key = next((k for k in is_d if '營業收入' in k), None)
+    gp_key = next((k for k in is_d if '毛利' in k and '淨額' not in k), None)
+    ni_key = next((k for k in is_d if '稅後淨利' in k), None)
+    ca_key = next((k for k in bs_d if '流動資產合計' in k), None)
+    cl_key = next((k for k in bs_d if '流動負債合計' in k), None)
+    tl_key = next((k for k in bs_d if '負債總額' in k), None)
+    ta_key = next((k for k in bs_d if '資產總額' in k), None)
+    eq_key = next((k for k in bs_d if '股東權益總額' in k), None)
+
     metrics_by_year = {}
-    for yr in years:
-        rev_key  = next((k for k in is_d if '營業收入' in k), None)
-        gp_key   = next((k for k in is_d if '毛利' in k and '淨額' not in k), None)
-        ni_key   = next((k for k in is_d if '稅後淨利' in k), None)
-        ca_key   = next((k for k in bs_d if '流動資產合計' in k), None)
-        cl_key   = next((k for k in bs_d if '流動負債合計' in k), None)
-        tl_key   = next((k for k in bs_d if '負債總額' in k), None)
-        ta_key   = next((k for k in bs_d if '資產總額' in k), None)
-        eq_key   = next((k for k in bs_d if '股東權益總額' in k), None)
+    for index, yr in enumerate(years):
+        prev_yr = years[index + 1] if index + 1 < len(years) else None
 
         rev = g(is_d, rev_key, yr) if rev_key else None
         gp  = g(is_d, gp_key,  yr) if gp_key  else None
@@ -254,14 +264,18 @@ if __name__ == '__main__':
         tl  = g(bs_d, tl_key,  yr) if tl_key  else None
         ta  = g(bs_d, ta_key,  yr) if ta_key  else None
         eq  = g(bs_d, eq_key,  yr) if eq_key  else None
+        prev_ta = g(bs_d, ta_key, prev_yr) if ta_key and prev_yr else None
+        prev_eq = g(bs_d, eq_key, prev_yr) if eq_key and prev_yr else None
+        avg_ta = average_balance(ta, prev_ta)
+        avg_eq = average_balance(eq, prev_eq)
 
         metrics_by_year[yr] = {
             'gross_margin':  safe(gp, rev),
             'net_margin':    safe(ni, rev),
             'current_ratio': safe(ca, cl),
             'debt_ratio':    safe(tl, ta),
-            'roe':           safe(ni, eq),
-            'roa':           safe(ni, ta),
+            'roe':           safe(ni, avg_eq),
+            'roa':           safe(ni, avg_ta),
         }
 
     data = run_verification(data, metrics_by_year)
