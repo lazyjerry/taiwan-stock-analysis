@@ -1,6 +1,5 @@
 ---
 name: taiwan-stock-analysis
-version: 1.0.0
 description: |
   台灣上市上櫃公司三維財務分析儀表板。從 Goodinfo.tw 抓取真實財報數據（損益表、資產負債表、現金流量表），計算關鍵財務指標，生成互動式三分頁 HTML 儀表板（經營分析 / 獲利分析 / 財務健全度）並匯出為可分享的 HTML 檔案。
 
