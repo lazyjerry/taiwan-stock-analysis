@@ -1,73 +1,147 @@
-# 🇹🇼 台灣股票三維財務分析 Skill
+# 🇹🇼 台灣股票分析 Skills
 
-> 輸入股票代碼，自動從 Goodinfo.tw 讀取公開財報數據，生成互動式三維財務分析儀表板。
+這個 repo 目前包含兩個以台股為核心的 skill：
 
-## 📊 功能介紹
+- `taiwan-stock-analysis`：抓取 Goodinfo.tw 財報資料，整理成三維財務分析結果
+- `taiwan-stock-valuation-bands`：把既有分析結果轉成悲觀／中性／樂觀三種估值區間與 1–5 分評級
 
-只要告訴 Claude「幫我分析 XXXX（股票代碼）」，這個 Skill 會自動完成：
+## Skills
 
-1. **讀取公開財報數據** — 從 Goodinfo.tw 擷取損益表、資產負債表、現金流量表
-2. **計算關鍵財務指標** — 毛利率、費用率、ROE、ROA、流動比率、自由現金流等
-3. **生成互動式儀表板** — 三分頁 HTML，含 KPI 卡片、圖表、數據表格
-4. **匯出 HTML 檔案** — 可直接在瀏覽器開啟、分享或發布
+### taiwan-stock-analysis
 
-## 🔍 三大分析維度
+用途：輸入股票代號後，抓取公開財報數據，整理經營分析、獲利分析、財務健全度。
+
+涵蓋面向：
 
 | 分頁 | 分析內容 |
 |------|---------|
-| 📊 **經營分析** | 營收成長、毛利率趨勢、管銷研費結構、費用率、營業利益率 |
-| 💰 **獲利分析** | 稅後淨利、EPS、ROE、ROA、三層利潤率比較、現金股利 |
-| 🏦 **財務健全度** | 現金部位、流動比率、負債比率、營業現金流、自由現金流 |
+| 經營分析 | 營收成長、毛利率趨勢、管銷研費結構、費用率、營業利益率 |
+| 獲利分析 | 稅後淨利、EPS、ROE、ROA、三層利潤率比較、現金股利 |
+| 財務健全度 | 現金部位、流動比率、負債比率、營業現金流、自由現金流 |
 
-## 🚀 使用範例
+### taiwan-stock-valuation-bands
 
+用途：把既有 `*_analysis.json` 轉成三種 EPS 情境的估值帶，並輸出 1–5 分價格區間、現價評分與分批建議。
+
+使用前提：
+
+- 先和使用者確認股票代號、公司名稱、檔名是否為同一個標的
+- 確認完成才分析
+- 若只有股票代號、沒有 `*_analysis.json`，不要直接假設 repo 內有 `analyze_tw_stock.py`
+
+## 資料流程
+
+### 1. 財報抓取
+
+從 repo 根目錄可執行：
+
+```bash
+python3 skills/taiwan-stock-analysis/scripts/fetch_goodinfo.py <stock_id>
 ```
+
+這支腳本會輸出 `<stock_id>_raw_data.json`。
+
+### 2. 估值計算
+
+估值 skill 讀的是 `*_analysis.json`，不是 `*_raw_data.json`。
+
+```bash
+python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
+    --analysis-json <company>_<stock_id>_analysis.json \
+    --current-price 163.5
+```
+
+若只提供股票代號，必須額外指定 `--analyze-script`。目前這個 repo 沒有內建預設的 `analyze_tw_stock.py`。
+
+## 專案結構
+
+```text
+taiwan-stock-analysis/
+├── README.md
+├── skills/
+│   ├── taiwan-stock-analysis/
+│   │   ├── SKILL.md
+│   │   ├── references/
+│   │   │   └── dashboard_template.md
+│   │   └── scripts/
+│   │       └── fetch_goodinfo.py
+│   └── taiwan-stock-valuation-bands/
+│       ├── SKILL.md
+│       ├── references/
+│       │   └── methodology.md
+│       └── scripts/
+│           └── build_valuation_report.py
+└── docs/
+```
+
+## 使用範例
+
+財報分析：
+
+```text
 幫我分析 2330 台積電
 ```
 
-## 📁 檔案結構
+估值分析：
 
-```
-taiwan-stock-analysis/
-├── SKILL.md                        # Skill 主要說明與操作步驟
-├── scripts/
-│   └── fetch_goodinfo.py           # 財報數據抓取腳本
-└── references/
-    └── dashboard_template.md       # HTML 儀表板 CSS/JS 模板規格
+```text
+幫我用 2317 的 analysis JSON 算估值區間，現價 163.5
 ```
 
-## ⚙️ 技術說明
+## 安裝 ai-global
 
-### 資料來源
-- **Goodinfo.tw** — 台灣公開股票財報資料庫
-- 支援所有台灣**上市、上櫃**公司（4位數股票代碼）
-- 預設分析**最近三年**數據
+若你要把這個 repo 的 skills 納入全域 AI 工具設定，建議先安裝你這個 fork 版本的 ai-global：
 
-### 核心技術
-- BeautifulSoup HTML 解析 — 從財報表格提取結構化數據
-- Chart.js v4.5.0 — 互動式圖表（雙Y軸組合圖、堆疊柱狀圖、折線圖）
+倉庫：<https://github.com/lazyjerry/ai-global>
 
-## 🛠️ 安裝方式
+前置需求：
 
-1. 下載 `taiwan-stock-analysis.skill` 檔案
-2. 開啟 Claude 桌面版 → Settings → Skills
-3. 匯入 `.skill` 檔案
-4. 對 Claude 說「幫我分析 XXXX」即可開始使用
+- Node.js 14 以上可安裝 CLI
+- 若要使用 tauri-gui，需 Node.js 18 以上與 Rust stable 1.75 以上
 
-## 📋 生成的儀表板包含
+推薦安裝方式：
 
-每個分頁都有：
-- **5張 KPI 卡片** — 顯示關鍵數值與年度變化
-- **分析重點摘要** — 3-5條具體數字的趨勢觀察
-- **4張互動圖表** — 組合圖、堆疊圖、折線圖、趨勢圖
-- **詳細數據表格** — 完整財報數字對照
+```bash
+curl -fsSL https://raw.githubusercontent.com/lazyjerry/ai-global/main/install.sh | bash
+```
 
-## ⚠️ 注意事項
+也可用 npm：
 
-- 本工具僅供**財務學習與研究參考**，不構成投資建議
+```bash
+npm install -g ai-global
+```
+
+其他套件管理器：
+
+```bash
+pnpm add -g ai-global
+yarn global add ai-global
+bun add -g ai-global
+```
+
+安裝後首次執行：
+
+```bash
+ai-global
+```
+
+這會掃描已安裝的 AI 工具、備份原始設定到 `~/.ai-global/backups/`，並建立共享設定的符號連結。
+
+若要把 GitHub repo 加進全域 skills，可用：
+
+```bash
+ai-global add-skill lazyjerry/taiwan-stock-analysis
+```
+
+或：
+
+```bash
+ai-global add-skill https://github.com/lazyjerry/taiwan-stock-analysis
+```
+
+## 注意事項
+
+- 僅適用於台灣上市／上櫃公司（4 位數股票代碼）
 - 數據來源為 Goodinfo.tw，如有異動請以公開資訊觀測站為準
-- 僅適用於台灣上市/上櫃公司（4位數股票代碼）
-
----
-
-Made with ❤️ using [Claude](https://claude.ai) + Cowork mode
+- 僅供財務學習與研究參考，不構成投資建議
+- `fetch_goodinfo.py` 目前產出的是原始財報 JSON；估值 skill 需要的是分析後 JSON，兩者不要混用

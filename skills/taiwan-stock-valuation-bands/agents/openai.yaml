@@ -1,0 +1,4 @@
+interface:
+  display_name: "TW Stock Valuation Bands"
+  short_description: "以台股財報分析 JSON 生成三情境估值區間與 1-5 分評級。"
+  default_prompt: "根據股票代碼或分析 JSON，產出悲觀、中性、樂觀三種價格區間，並附上 1-5 分評級與分批建議。"
