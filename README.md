@@ -2,7 +2,7 @@
 
 這個 repo 目前包含兩個以台股為核心的 skill：
 
-- `taiwan-stock-analysis`：抓取 Goodinfo.tw 財報資料，整理成三維財務分析結果
+- `taiwan-stock-analysis`：抓取 MOPS 官方財報頁資料，整理成三維財務分析結果
 - `taiwan-stock-valuation-bands`：把既有分析結果轉成悲觀／中性／樂觀三種估值區間與 1–5 分評級
 
 ## Skills
@@ -22,6 +22,7 @@
 ### taiwan-stock-valuation-bands
 
 用途：把既有 `*_analysis.json` 轉成三種 EPS 情境的估值帶，並輸出 1–5 分價格區間、現價評分與分批建議。
+若另外提供歷史股價 JSON，還會補上近年收盤價區間與百分位。
 
 使用前提：
 
@@ -39,11 +40,28 @@
 python3 skills/taiwan-stock-analysis/scripts/fetch_goodinfo.py <stock_id>
 ```
 
-這支腳本會輸出 `<stock_id>_raw_data.json`。
+這支腳本沿用舊檔名，但目前實際改由 MOPS 官方財報頁抓資料，會輸出 `<stock_id>_goodinfo_raw_data.json`。
+
+若要把 raw JSON 轉成三分頁 HTML 儀表板：
+
+```bash
+python3 skills/taiwan-stock-analysis/scripts/build_analysis_dashboard.py \
+    --raw-json <stock_id>_goodinfo_raw_data.json \
+    --price-history-json <stock_id>_twse_price_history.json \
+    --output <company>_<stock_id>_analysis.html
+```
 
 ### 2. 估值計算
 
-估值 skill 讀的是 `*_analysis.json`，不是 `*_raw_data.json`。
+估值 skill 讀的是 `*_analysis.json`，不是 `*_goodinfo_raw_data.json`。
+
+若要補歷史股價，可先抓上市股票的公開日價資料：
+
+```bash
+python3 skills/taiwan-stock-valuation-bands/scripts/fetch_price_history.py 2330 --months 36
+```
+
+預設會輸出 `<stock_id>_<market>_price_history.json`，例如 `2330_twse_price_history.json`。
 
 ```bash
 python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
@@ -51,7 +69,17 @@ python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
     --current-price 163.5
 ```
 
+若有歷史股價 JSON：
+
+```bash
+python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
+    --analysis-json <company>_<stock_id>_analysis.json \
+    --current-price 163.5 \
+    --price-history-json <stock_id>_<market>_price_history.json
+```
+
 若只提供股票代號，必須額外指定 `--analyze-script`。目前這個 repo 沒有內建預設的 `analyze_tw_stock.py`。
+歷史股價抓取目前僅支援上市 `TWSE`，上櫃 `TPEx` 尚未接入官方日價 JSON。
 
 ## 專案結構
 
@@ -64,13 +92,15 @@ taiwan-stock-analysis/
 │   │   ├── references/
 │   │   │   └── dashboard_template.md
 │   │   └── scripts/
+│   │       ├── build_analysis_dashboard.py
 │   │       └── fetch_goodinfo.py
 │   └── taiwan-stock-valuation-bands/
 │       ├── SKILL.md
 │       ├── references/
 │       │   └── methodology.md
 │       └── scripts/
-│           └── build_valuation_report.py
+│           ├── build_valuation_report.py
+│           └── fetch_price_history.py
 └── docs/
 ```
 
@@ -142,6 +172,6 @@ ai-global add-skill https://github.com/lazyjerry/taiwan-stock-analysis
 ## 注意事項
 
 - 僅適用於台灣上市／上櫃公司（4 位數股票代碼）
-- 數據來源為 Goodinfo.tw，如有異動請以公開資訊觀測站為準
+- 財報資料來源為 MOPS 官方財報頁；歷史股價資料來源為 TWSE 公開日價 API
 - 僅供財務學習與研究參考，不構成投資建議
-- `fetch_goodinfo.py` 目前產出的是原始財報 JSON；估值 skill 需要的是分析後 JSON，兩者不要混用
+- `fetch_goodinfo.py` 目前產出的是原始財報 JSON（`*_goodinfo_raw_data.json`）；估值 skill 需要的是分析後 JSON，兩者不要混用

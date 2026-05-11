@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 fetch_goodinfo.py
-從 Goodinfo.tw 抓取台灣股票財報數據，含三層驗證機制（Provenance / Sanity / MOPS連結）
+沿用既有檔名，但改由 MOPS 官方財報頁抓取台灣股票年度財報數據。
+輸出最近三個可用年度的原始財報 JSON，含三層驗證機制（Provenance / Sanity / MOPS連結）。
 用法：python fetch_goodinfo.py <股票代碼>
 範例：python fetch_goodinfo.py 2317
 """
@@ -13,83 +14,175 @@ import json
 import sys
 import argparse
 import urllib3
+from datetime import date
+
+
+MOPS_HOST = 'https://mopsov.twse.com.tw'
+STATEMENT_PAGE_MAP = {
+    'balance_sheet': 't164sb03',
+    'income_statement': 't164sb04',
+    'cash_flow': 't164sb05',
+}
+MARKET_LABELS = {
+    'sii': '上市',
+    'otc': '上櫃',
+}
+MAX_LOOKBACK_YEARS = 8
 
 
 # ─── 抓取層 ───────────────────────────────────────────────
 
-def get_client_key():
-    tz_offset = -480  # 台灣 UTC+8
-    now_ms = time.time() * 1000
-    days_since_epoch = now_ms / 86400000
-    days_adjusted = days_since_epoch - tz_offset / 1440
-    client_key = f"2.8|38057.1435627105|46946.0324515993|{tz_offset}|{days_adjusted}|{days_adjusted}"
-    return client_key, days_adjusted
+def make_session(verify_ssl=True):
+    session = requests.Session()
+    session.verify = verify_ssl
+    session.headers.update(
+        {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': f'{MOPS_HOST}/mops/web/index',
+        }
+    )
+    return session
 
-def fetch_report(stock_id, rpt_cat, days_adjusted, client_key, verify_ssl=True):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://goodinfo.tw/'
+
+def normalize_text(text):
+    return ' '.join(text.replace('\xa0', ' ').split())
+
+
+def parse_amount(text, raw_unit=False):
+    cleaned = text.replace(',', '').replace(' ', '').strip()
+    if cleaned in {'', '--', '—', '-'}:
+        return None
+    negative = cleaned.startswith('(') and cleaned.endswith(')')
+    if negative:
+        cleaned = cleaned[1:-1]
+    try:
+        value = float(cleaned)
+    except ValueError:
+        return None
+    if negative:
+        value *= -1
+    if raw_unit:
+        return round(value, 2)
+    return round(value / 100000, 2)
+
+
+def build_payload(stock_id, roc_year, market):
+    return {
+        'step': '1',
+        'firstin': '1',
+        'off': '1',
+        'queryName': 'co_id',
+        'inpuType': 'co_id',
+        'TYPEK': market,
+        'isnew': 'false',
+        'co_id': stock_id,
+        'year': str(roc_year),
+        'season': '04',
     }
-    cookies = {'CLIENT_KEY': client_key}
-    url = f"https://goodinfo.tw/tw/StockFinDetail.asp?RPT_CAT={rpt_cat}&STOCK_ID={stock_id}&REINIT={days_adjusted:.10f}"
-    r = requests.get(url, headers=headers, cookies=cookies, timeout=15, verify=verify_ssl)
-    r.encoding = 'utf-8'
-    return BeautifulSoup(r.text, 'html.parser')
 
-def parse_table(soup):
-    """解析 Goodinfo 財報表格，返回 {欄位名: {年度: 數值}} 的字典"""
+
+def fetch_statement_html(session, stock_id, roc_year, market, page_id):
+    url = f'{MOPS_HOST}/mops/web/ajax_{page_id}'
+    response = session.post(
+        url,
+        data=build_payload(stock_id, roc_year, market),
+        headers={'Referer': f'{MOPS_HOST}/mops/web/{page_id}'},
+        timeout=20,
+    )
+    response.raise_for_status()
+    response.encoding = 'utf-8'
+    html = response.text
+    if not html.strip():
+        raise RuntimeError(
+            f'MOPS 回傳空內容：stock_id={stock_id} year={roc_year} market={market} page={page_id}'
+        )
+    if '查詢無資料' in html or '查無所需資料' in html:
+        return None
+    return html
+
+
+def parse_company_name(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    heading = soup.find('h4')
+    if heading:
+        text = normalize_text(heading.get_text(' ', strip=True))
+        marker = '本資料由'
+        suffix = '公司提供'
+        if marker in text and suffix in text:
+            return text.split(marker, 1)[1].split(suffix, 1)[0]
+    text = normalize_text(soup.get_text(' ', strip=True))
+    if '上市公司)' in text:
+        return text.split('上市公司)', 1)[1].split(' ', 1)[0]
+    if '上櫃公司)' in text:
+        return text.split('上櫃公司)', 1)[1].split(' ', 1)[0]
+    return stock_id
+
+
+def parse_statement_table(html):
+    soup = BeautifulSoup(html, 'html.parser')
     tables = soup.find_all('table')
-    if len(tables) < 7:
-        return {}, []
+    if len(tables) < 2:
+        raise ValueError(f'MOPS 頁面缺少財報表格，僅找到 {len(tables)} 個 table')
 
-    t = tables[6]  # 財報數據在第7個表格（index=6）
-    rows = t.find_all('tr')
-    years = []
-    data = {}
-
-    for i, row in enumerate(rows):
-        cells = row.find_all(['td', 'th'])
-        if not cells:
+    result = {}
+    for row in tables[1].find_all('tr')[4:]:
+        cells = [normalize_text(cell.get_text(' ', strip=True)) for cell in row.find_all(['th', 'td'])]
+        if len(cells) < 2:
             continue
-        row_data = [c.get_text(strip=True) for c in cells]
-
-        if i == 0 and any(y in row_data for y in ['2025', '2024', '2023', '2022', '2021', '2020']):
-            for val in row_data[1:]:
-                if len(val) == 4 and val.isdigit():
-                    years.append(val)
+        label = cells[0]
+        if not label:
             continue
+        value = parse_amount(cells[1], raw_unit='每股盈餘' in label or '每股虧損' in label)
+        if value is None:
+            continue
+        result[label] = value
 
-        if len(row_data) >= 3 and row_data[0]:
-            field_name = row_data[0]
-            values = {}
-            val_cols = row_data[1:]
-            for j, yr in enumerate(years):
-                if j * 2 < len(val_cols):
-                    raw = val_cols[j * 2]
-                    try:
-                        values[yr] = float(raw.replace(',', ''))
-                    except Exception:
-                        values[yr] = None
-            if values:
-                data[field_name] = values
+    if not result:
+        raise ValueError('MOPS 財報表格解析失敗，抓不到欄位資料')
+    return result
 
-    return data, years
+
+def find_market_and_years(session, stock_id):
+    current_roc_year = date.today().year - 1911
+    for market in ('sii', 'otc'):
+        found_years = []
+        cached_html = {}
+        for roc_year in range(current_roc_year, current_roc_year - MAX_LOOKBACK_YEARS, -1):
+            html = fetch_statement_html(session, stock_id, roc_year, market, STATEMENT_PAGE_MAP['income_statement'])
+            if html is None:
+                continue
+            found_years.append(roc_year)
+            cached_html[('income_statement', roc_year)] = html
+            if len(found_years) == 3:
+                return market, found_years, cached_html
+    raise RuntimeError(f'找不到 {stock_id} 最近三個可用年度的官方財報資料')
+
+
+def build_year_dict(statement_by_year):
+    merged = {}
+    for year, fields in statement_by_year.items():
+        for field_name, value in fields.items():
+            merged.setdefault(field_name, {})[year] = value
+    return merged
 
 
 # ─── 驗證層 A：資料來源標注 ────────────────────────────────
 
-def build_metadata(stock_id, years):
+def build_metadata(stock_id, company_name, years, market):
     return {
         'fetched_at': time.strftime('%Y-%m-%dT%H:%M:%S+08:00'),
-        'source': 'Goodinfo.tw',
+        'source': 'MOPS 官方財報頁',
+        'company_name': company_name,
+        'market': market,
+        'market_label': MARKET_LABELS.get(market, market),
         'source_urls': {
-            'income_statement': f'https://goodinfo.tw/tw/StockFinDetail.asp?RPT_CAT=IS_YEAR&STOCK_ID={stock_id}',
-            'balance_sheet':    f'https://goodinfo.tw/tw/StockFinDetail.asp?RPT_CAT=BS_YEAR&STOCK_ID={stock_id}',
-            'cash_flow':        f'https://goodinfo.tw/tw/StockFinDetail.asp?RPT_CAT=CF_YEAR&STOCK_ID={stock_id}',
+            'income_statement': f'{MOPS_HOST}/mops/web/{STATEMENT_PAGE_MAP["income_statement"]}',
+            'balance_sheet': f'{MOPS_HOST}/mops/web/{STATEMENT_PAGE_MAP["balance_sheet"]}',
+            'cash_flow': f'{MOPS_HOST}/mops/web/{STATEMENT_PAGE_MAP["cash_flow"]}',
         },
         'mops_url':     f'https://mops.twse.com.tw/mops/web/t05st01?step=1&co_id={stock_id}&TYPEK=sii',
         'mops_url_otc': f'https://mops.twse.com.tw/mops/web/t05st01?step=1&co_id={stock_id}&TYPEK=otc',
-        'years_covered': years[:3],
+        'years_covered': years,
         'currency': 'TWD 億元',
     }
 
@@ -150,33 +243,48 @@ def sanity_check(metrics_by_year, years):
 # ─── 主流程 ───────────────────────────────────────────────
 
 def fetch_all(stock_id, verify_ssl=True):
-    client_key, days_adjusted = get_client_key()
     result = {'stock_id': stock_id}
 
     if not verify_ssl:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        print("⚠️  本次已停用 SSL 憑證驗證，僅建議用於本機 CA 異常排查")
+        print('⚠️  本次已停用 SSL 憑證驗證，僅建議用於本機 CA 異常排查')
 
-    print(f"正在抓取 {stock_id} 損益表...")
-    is_soup = fetch_report(stock_id, 'IS_YEAR', days_adjusted, client_key, verify_ssl=verify_ssl)
-    is_data, years = parse_table(is_soup)
-    result['income_statement'] = is_data
-    result['years'] = years
+    session = make_session(verify_ssl=verify_ssl)
+    market, roc_years, cached_html = find_market_and_years(session, stock_id)
+    gregorian_years = [str(year + 1911) for year in roc_years]
+    first_html = cached_html[('income_statement', roc_years[0])]
+    company_name = parse_company_name(first_html)
 
-    time.sleep(1)
-    print(f"正在抓取 {stock_id} 資產負債表...")
-    bs_soup = fetch_report(stock_id, 'BS_YEAR', days_adjusted, client_key, verify_ssl=verify_ssl)
-    bs_data, _ = parse_table(bs_soup)
-    result['balance_sheet'] = bs_data
+    print(f'已鎖定 {stock_id} 為 {MARKET_LABELS.get(market, market)}公司，最近三年：{", ".join(gregorian_years)}')
 
-    time.sleep(1)
-    print(f"正在抓取 {stock_id} 現金流量表...")
-    cf_soup = fetch_report(stock_id, 'CF_YEAR', days_adjusted, client_key, verify_ssl=verify_ssl)
-    cf_data, _ = parse_table(cf_soup)
-    result['cash_flow'] = cf_data
+    raw_by_statement = {
+        'income_statement': {},
+        'balance_sheet': {},
+        'cash_flow': {},
+    }
+
+    for statement_name, page_id in STATEMENT_PAGE_MAP.items():
+        print(f'正在抓取 {stock_id} {statement_name}...')
+        for roc_year, gregorian_year in zip(roc_years, gregorian_years):
+            html = cached_html.get((statement_name, roc_year))
+            if html is None:
+                html = fetch_statement_html(session, stock_id, roc_year, market, page_id)
+            if html is None:
+                raise RuntimeError(
+                    f'找不到 {stock_id} {gregorian_year} 年 {statement_name} 官方財報資料'
+                )
+            raw_by_statement[statement_name][gregorian_year] = parse_statement_table(html)
+            time.sleep(0.2)
+
+    result['company_name'] = company_name
+    result['market'] = market
+    result['income_statement'] = build_year_dict(raw_by_statement['income_statement'])
+    result['balance_sheet'] = build_year_dict(raw_by_statement['balance_sheet'])
+    result['cash_flow'] = build_year_dict(raw_by_statement['cash_flow'])
+    result['years'] = gregorian_years
 
     # 驗證層 A：資料標注
-    result['metadata'] = build_metadata(stock_id, years)
+    result['metadata'] = build_metadata(stock_id, company_name, gregorian_years, market)
 
     return result
 
@@ -225,13 +333,26 @@ if __name__ == '__main__':
         action='store_true',
         help='停用本次 HTTPS 憑證驗證，僅用於本機 CA 憑證異常時',
     )
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+
+    if unknown:
+        if any(arg in {'--months', '--market', '--output'} for arg in unknown):
+            parser.exit(
+                2,
+                '錯誤：fetch_goodinfo.py 只抓財報，不支援 --months / --market / --output。\n'
+                '若要抓歷史股價，請改用：\n'
+                'python3 skills/taiwan-stock-valuation-bands/scripts/fetch_price_history.py <stock_id> --months 36\n',
+            )
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
 
     raw = args.stock_id
     if not re.fullmatch(r'\d{4,6}', raw):
         sys.exit(f"錯誤：stock_id 必須為 4–6 位數字，收到：{raw!r}")
     stock_id = raw
-    data = fetch_all(stock_id, verify_ssl=not args.insecure)
+    try:
+        data = fetch_all(stock_id, verify_ssl=not args.insecure)
+    except Exception as exc:
+        sys.exit(f"錯誤：{exc}")
 
     is_d = data['income_statement']
     bs_d = data['balance_sheet']
@@ -243,14 +364,15 @@ if __name__ == '__main__':
         return table.get(key, {}).get(yr)
     def safe(a, b): return a / b * 100 if (a is not None and b) else None
 
-    rev_key = next((k for k in is_d if '營業收入' in k), None)
-    gp_key = next((k for k in is_d if '毛利' in k and '淨額' not in k), None)
-    ni_key = next((k for k in is_d if '稅後淨利' in k), None)
+    rev_key = next((k for k in is_d if '營業收入合計' in k or k == '營業收入'), None)
+    gp_key = next((k for k in is_d if '營業毛利（毛損）淨額' in k or k == '營業毛利（毛損）'), None)
+    op_key = next((k for k in is_d if '營業利益（損失）' in k), None)
+    ni_key = next((k for k in is_d if '本期淨利' in k or '稅後淨利' in k), None)
     ca_key = next((k for k in bs_d if '流動資產合計' in k), None)
     cl_key = next((k for k in bs_d if '流動負債合計' in k), None)
-    tl_key = next((k for k in bs_d if '負債總額' in k), None)
-    ta_key = next((k for k in bs_d if '資產總額' in k), None)
-    eq_key = next((k for k in bs_d if '股東權益總額' in k), None)
+    tl_key = next((k for k in bs_d if '負債總計' in k or '負債總額' in k), None)
+    ta_key = next((k for k in bs_d if '資產總計' in k or '資產總額' in k), None)
+    eq_key = next((k for k in bs_d if '權益總計' in k or '股東權益總額' in k), None)
 
     metrics_by_year = {}
     for index, yr in enumerate(years):
@@ -258,6 +380,7 @@ if __name__ == '__main__':
 
         rev = g(is_d, rev_key, yr) if rev_key else None
         gp  = g(is_d, gp_key,  yr) if gp_key  else None
+        op  = g(is_d, op_key,  yr) if op_key  else None
         ni  = g(is_d, ni_key,  yr) if ni_key  else None
         ca  = g(bs_d, ca_key,  yr) if ca_key  else None
         cl  = g(bs_d, cl_key,  yr) if cl_key  else None
@@ -271,6 +394,7 @@ if __name__ == '__main__':
 
         metrics_by_year[yr] = {
             'gross_margin':  safe(gp, rev),
+            'op_margin':     safe(op, rev),
             'net_margin':    safe(ni, rev),
             'current_ratio': safe(ca, cl),
             'debt_ratio':    safe(tl, ta),
@@ -283,13 +407,13 @@ if __name__ == '__main__':
     print(f"\n=== {stock_id} 財報摘要 ===")
     print(f"年度: {years}")
     for yr in years:
-        rev_key = next((k for k in is_d if '營業收入' in k), None)
-        eps_key = next((k for k in is_d if '每股' in k and '盈餘' in k), None)
+        rev_key = next((k for k in is_d if '營業收入合計' in k or k == '營業收入'), None)
+        eps_key = next((k for k in is_d if '基本每股盈餘' in k or ('每股' in k and '盈餘' in k)), None)
         rev = g(is_d, rev_key, yr) if rev_key else None
         eps = g(is_d, eps_key, yr) if eps_key else None
         print(f"  {yr}: 營收={rev}億, EPS={eps}元")
 
-    out_file = f'{stock_id}_raw_data.json'
+    out_file = f'{stock_id}_goodinfo_raw_data.json'
     with open(out_file, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"\n原始數據（含驗證結果）已存至 {out_file}")

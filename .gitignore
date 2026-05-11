@@ -46,6 +46,4 @@ $RECYCLE.BIN/
 
 # NFS temporary files
 .nfs*
-scripts/__pycache__
-*_raw_data.json
-*_analysis.html
+__pycache__
