@@ -2,7 +2,6 @@
   "chat.agentSkillsLocations": {
     "~/.agents/skills": false,
     "~/.copilot/skills": false,
-    "~/.claude/skills": false,
     "./skills": true
   }
 }

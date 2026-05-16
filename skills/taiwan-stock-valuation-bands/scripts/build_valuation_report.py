@@ -68,6 +68,16 @@ def parse_args() -> argparse.Namespace:
         default="markdown",
         help="Report format",
     )
+    parser.add_argument(
+        "--output-file",
+        type=Path,
+        help="Write the report to a specific file path",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Write the report into a directory; filename is derived from analysis JSON",
+    )
     parser.add_argument("--pessimistic-eps", type=float, help="Override pessimistic EPS")
     parser.add_argument("--base-eps", type=float, help="Override base EPS")
     parser.add_argument("--optimistic-eps", type=float, help="Override optimistic EPS")
@@ -253,6 +263,70 @@ def fmt_per(value: float | None) -> str:
     return f"{value:.2f}x"
 
 
+def fmt_metric(value: float | None, digits: int = 2, suffix: str = "") -> str:
+    if value is None:
+        return "-"
+    return f"{value:.{digits}f}{suffix}"
+
+
+def metric_delta(values: list[float | None], digits: int = 2, suffix: str = "") -> str:
+    usable = [value for value in values if value is not None]
+    if len(usable) < 2:
+        return "資料不足"
+    delta = usable[-1] - usable[0]
+    sign = "+" if delta > 0 else ""
+    return f"{sign}{delta:.{digits}f}{suffix}"
+
+
+def trend_text(values: list[float | None], positive_is_good: bool = True) -> str:
+    usable = [value for value in values if value is not None]
+    if len(usable) < 2:
+        return "資料不足"
+    if usable[-1] > usable[0]:
+        return "改善" if positive_is_good else "升高"
+    if usable[-1] < usable[0]:
+        return "轉弱" if positive_is_good else "下降"
+    return "持平"
+
+
+def derive_output_path(
+    analysis_json: Path,
+    output_format: str,
+    output_file: Path | None,
+    output_dir: Path | None,
+) -> Path:
+    if output_file is not None:
+        return output_file
+
+    suffix = ".md" if output_format == "markdown" else ".json"
+    stem = analysis_json.stem
+    if stem.endswith("_analysis"):
+        report_name = f"{stem[:-9]}_valuation{suffix}"
+    else:
+        report_name = f"{stem}_valuation{suffix}"
+
+    base_dir = output_dir if output_dir is not None else analysis_json.parent
+    return base_dir / report_name
+
+
+def write_report(path: Path, content: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def table_row(
+    label: str,
+    values: list[float | None],
+    digits: int = 2,
+    suffix: str = "",
+    trend: str | None = None,
+) -> str:
+    rendered_values = [fmt_metric(value, digits, suffix) for value in values]
+    rendered_trend = trend if trend is not None else metric_delta(values, digits, suffix)
+    return f"| {label} | " + " | ".join(rendered_values) + f" | {rendered_trend} |"
+
+
 def describe_range_position(range_position_pct: float) -> str:
     if range_position_pct <= 20:
         return "接近區間低檔"
@@ -263,6 +337,65 @@ def describe_range_position(range_position_pct: float) -> str:
     if range_position_pct <= 80:
         return "偏高檔"
     return "接近區間高檔"
+
+
+def build_financial_sections(data: dict) -> list[str]:
+    years = data.get("years") or []
+    metrics_by_year = data.get("metrics_by_year") or {}
+    if not years or not metrics_by_year:
+        return []
+
+    year_headers = " | ".join(years)
+    metrics = [metrics_by_year.get(year, {}) for year in years]
+
+    revenue_values = [metric.get("revenue") for metric in metrics]
+    gross_margin_values = [metric.get("gross_margin") for metric in metrics]
+    total_opex_ratio_values = [metric.get("total_opex_ratio") for metric in metrics]
+    op_margin_values = [metric.get("op_margin") for metric in metrics]
+    net_income_values = [metric.get("net_income") for metric in metrics]
+    eps_values = [metric.get("eps") for metric in metrics]
+    roe_values = [metric.get("roe") for metric in metrics]
+    dividends_values = [
+        None if metric.get("dividends") is None else abs(metric.get("dividends"))
+        for metric in metrics
+    ]
+    cash_values = [metric.get("cash") for metric in metrics]
+    current_ratio_values = [metric.get("current_ratio") for metric in metrics]
+    debt_ratio_values = [metric.get("debt_ratio") for metric in metrics]
+    operating_cf_values = [metric.get("operating_cf") for metric in metrics]
+    fcf_values = [metric.get("fcf") for metric in metrics]
+    cfo_to_net_values = [metric.get("cfo_to_net") for metric in metrics]
+
+    return [
+        "## 財報整理",
+        "",
+        "### 營運規模與成本結構",
+        f"| 項目 | {year_headers} | 三年變化 |",
+        f"|---|" + "---|" * len(years) + "---|",
+        table_row("營收（億元）", revenue_values, trend=f"{trend_text(revenue_values)} {metric_delta(revenue_values)} 億元"),
+        table_row("毛利率", gross_margin_values, suffix="%", trend=f"{trend_text(gross_margin_values)} {metric_delta(gross_margin_values, suffix='%')}"),
+        table_row("營業費用率", total_opex_ratio_values, suffix="%", trend=f"{trend_text(total_opex_ratio_values, positive_is_good=False)} {metric_delta(total_opex_ratio_values, suffix='%')}"),
+        table_row("營業利益率", op_margin_values, suffix="%", trend=f"{trend_text(op_margin_values)} {metric_delta(op_margin_values, suffix='%')}"),
+        "",
+        "### 獲利與股東報酬",
+        f"| 項目 | {year_headers} | 三年變化 |",
+        f"|---|" + "---|" * len(years) + "---|",
+        table_row("稅後淨利（億元）", net_income_values, trend=f"{trend_text(net_income_values)} {metric_delta(net_income_values)} 億元"),
+        table_row("EPS（元）", eps_values, trend=f"{trend_text(eps_values)} {metric_delta(eps_values)} 元"),
+        table_row("ROE", roe_values, suffix="%", trend=f"{trend_text(roe_values)} {metric_delta(roe_values, suffix='%')}"),
+        table_row("現金股利（億元）", dividends_values, trend=f"{trend_text(dividends_values)} {metric_delta(dividends_values)} 億元"),
+        "",
+        "### 資產負債與現金流",
+        f"| 項目 | {year_headers} | 三年變化 |",
+        f"|---|" + "---|" * len(years) + "---|",
+        table_row("現金部位（億元）", cash_values, trend=f"{trend_text(cash_values)} {metric_delta(cash_values)} 億元"),
+        table_row("流動比率", current_ratio_values, suffix="%", trend=f"{trend_text(current_ratio_values)} {metric_delta(current_ratio_values, suffix='%')}"),
+        table_row("負債比率", debt_ratio_values, suffix="%", trend=f"{trend_text(debt_ratio_values, positive_is_good=False)} {metric_delta(debt_ratio_values, suffix='%')}"),
+        table_row("營業現金流（億元）", operating_cf_values, trend=f"{trend_text(operating_cf_values)} {metric_delta(operating_cf_values)} 億元"),
+        table_row("自由現金流（億元）", fcf_values, trend=f"{trend_text(fcf_values)} {metric_delta(fcf_values)} 億元"),
+        table_row("現金流/淨利", cfo_to_net_values, trend=f"{trend_text(cfo_to_net_values)} {metric_delta(cfo_to_net_values)} 倍"),
+        "",
+    ]
 
 
 def make_report(
@@ -296,6 +429,7 @@ def make_report(
         "stock_id": stock_id,
         "latest_year": year,
         "latest_eps": latest_eps,
+        "analysis_data": data,
         "current_price": current_price,
         "price_history_summary": None
         if price_history is None
@@ -340,6 +474,7 @@ def render_markdown(report: dict) -> str:
             f"- 最近收盤百分位：`{history['percentile_pct']:.2f}%`（以區間內所有收盤價排序）"
         )
     lines.append("")
+    lines.extend(build_financial_sections(report["analysis_data"]))
 
     for scenario in report["scenario_rows"]:
         lines.append(f"## {scenario['label']}情境")
@@ -397,9 +532,18 @@ def main() -> int:
     scenarios = build_scenarios(args, float(latest_eps))
     report = make_report(data, scenarios, args.current_price, price_history)
     if args.output_format == "json":
-        print(json.dumps(report, ensure_ascii=False, indent=2))
+        rendered_output = json.dumps(report, ensure_ascii=False, indent=2)
     else:
-        print(render_markdown(report))
+        rendered_output = render_markdown(report)
+
+    output_path = derive_output_path(
+        analysis_json,
+        args.output_format,
+        args.output_file,
+        args.output_dir,
+    )
+    write_report(output_path, rendered_output)
+    print(rendered_output)
     return 0
 
 
