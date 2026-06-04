@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import math
 import subprocess
@@ -17,6 +18,8 @@ DEFAULT_PER_BANDS = {
     2: (10.0, 11.0),
     1: (11.0, None),
 }
+
+CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"
 
 
 @dataclass(frozen=True)
@@ -64,8 +67,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-format",
-        choices=("markdown", "json"),
-        default="markdown",
+        choices=("html", "json"),
+        default="html",
         help="Report format",
     )
     parser.add_argument(
@@ -298,7 +301,7 @@ def derive_output_path(
     if output_file is not None:
         return output_file
 
-    suffix = ".md" if output_format == "markdown" else ".json"
+    suffix = ".json" if output_format == "json" else ".html"
     stem = analysis_json.stem
     if stem.endswith("_analysis"):
         report_name = f"{stem[:-9]}_valuation{suffix}"
@@ -315,16 +318,32 @@ def write_report(path: Path, content: str) -> Path:
     return path
 
 
-def table_row(
+def esc(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def financial_row(
     label: str,
     values: list[float | None],
     digits: int = 2,
     suffix: str = "",
     trend: str | None = None,
-) -> str:
-    rendered_values = [fmt_metric(value, digits, suffix) for value in values]
+    positive_is_good: bool = True,
+) -> dict:
     rendered_trend = trend if trend is not None else metric_delta(values, digits, suffix)
-    return f"| {label} | " + " | ".join(rendered_values) + f" | {rendered_trend} |"
+    status = trend_text(values, positive_is_good)
+    if status == "改善":
+        trend_class_name = "up"
+    elif status in {"轉弱", "升高"}:
+        trend_class_name = "down"
+    else:
+        trend_class_name = "neutral"
+    return {
+        "label": label,
+        "values": [fmt_metric(value, digits, suffix) for value in values],
+        "trend": rendered_trend,
+        "trend_class": trend_class_name,
+    }
 
 
 def describe_range_position(range_position_pct: float) -> str:
@@ -339,13 +358,12 @@ def describe_range_position(range_position_pct: float) -> str:
     return "接近區間高檔"
 
 
-def build_financial_sections(data: dict) -> list[str]:
+def build_financial_groups(data: dict) -> list[dict]:
     years = data.get("years") or []
     metrics_by_year = data.get("metrics_by_year") or {}
     if not years or not metrics_by_year:
         return []
 
-    year_headers = " | ".join(years)
     metrics = [metrics_by_year.get(year, {}) for year in years]
 
     revenue_values = [metric.get("revenue") for metric in metrics]
@@ -367,34 +385,47 @@ def build_financial_sections(data: dict) -> list[str]:
     cfo_to_net_values = [metric.get("cfo_to_net") for metric in metrics]
 
     return [
-        "## 財報整理",
-        "",
-        "### 營運規模與成本結構",
-        f"| 項目 | {year_headers} | 三年變化 |",
-        f"|---|" + "---|" * len(years) + "---|",
-        table_row("營收（億元）", revenue_values, trend=f"{trend_text(revenue_values)} {metric_delta(revenue_values)} 億元"),
-        table_row("毛利率", gross_margin_values, suffix="%", trend=f"{trend_text(gross_margin_values)} {metric_delta(gross_margin_values, suffix='%')}"),
-        table_row("營業費用率", total_opex_ratio_values, suffix="%", trend=f"{trend_text(total_opex_ratio_values, positive_is_good=False)} {metric_delta(total_opex_ratio_values, suffix='%')}"),
-        table_row("營業利益率", op_margin_values, suffix="%", trend=f"{trend_text(op_margin_values)} {metric_delta(op_margin_values, suffix='%')}"),
-        "",
-        "### 獲利與股東報酬",
-        f"| 項目 | {year_headers} | 三年變化 |",
-        f"|---|" + "---|" * len(years) + "---|",
-        table_row("稅後淨利（億元）", net_income_values, trend=f"{trend_text(net_income_values)} {metric_delta(net_income_values)} 億元"),
-        table_row("EPS（元）", eps_values, trend=f"{trend_text(eps_values)} {metric_delta(eps_values)} 元"),
-        table_row("ROE", roe_values, suffix="%", trend=f"{trend_text(roe_values)} {metric_delta(roe_values, suffix='%')}"),
-        table_row("現金股利（億元）", dividends_values, trend=f"{trend_text(dividends_values)} {metric_delta(dividends_values)} 億元"),
-        "",
-        "### 資產負債與現金流",
-        f"| 項目 | {year_headers} | 三年變化 |",
-        f"|---|" + "---|" * len(years) + "---|",
-        table_row("現金部位（億元）", cash_values, trend=f"{trend_text(cash_values)} {metric_delta(cash_values)} 億元"),
-        table_row("流動比率", current_ratio_values, suffix="%", trend=f"{trend_text(current_ratio_values)} {metric_delta(current_ratio_values, suffix='%')}"),
-        table_row("負債比率", debt_ratio_values, suffix="%", trend=f"{trend_text(debt_ratio_values, positive_is_good=False)} {metric_delta(debt_ratio_values, suffix='%')}"),
-        table_row("營業現金流（億元）", operating_cf_values, trend=f"{trend_text(operating_cf_values)} {metric_delta(operating_cf_values)} 億元"),
-        table_row("自由現金流（億元）", fcf_values, trend=f"{trend_text(fcf_values)} {metric_delta(fcf_values)} 億元"),
-        table_row("現金流/淨利", cfo_to_net_values, trend=f"{trend_text(cfo_to_net_values)} {metric_delta(cfo_to_net_values)} 倍"),
-        "",
+        {
+            "title": "營運規模與成本結構",
+            "rows": [
+                financial_row("營收（億元）", revenue_values, trend=f"{trend_text(revenue_values)} {metric_delta(revenue_values)} 億元"),
+                financial_row("毛利率", gross_margin_values, suffix="%", trend=f"{trend_text(gross_margin_values)} {metric_delta(gross_margin_values, suffix='%')}"),
+                financial_row(
+                    "營業費用率",
+                    total_opex_ratio_values,
+                    suffix="%",
+                    trend=f"{trend_text(total_opex_ratio_values, positive_is_good=False)} {metric_delta(total_opex_ratio_values, suffix='%')}",
+                    positive_is_good=False,
+                ),
+                financial_row("營業利益率", op_margin_values, suffix="%", trend=f"{trend_text(op_margin_values)} {metric_delta(op_margin_values, suffix='%')}"),
+            ],
+        },
+        {
+            "title": "獲利與股東報酬",
+            "rows": [
+                financial_row("稅後淨利（億元）", net_income_values, trend=f"{trend_text(net_income_values)} {metric_delta(net_income_values)} 億元"),
+                financial_row("EPS（元）", eps_values, trend=f"{trend_text(eps_values)} {metric_delta(eps_values)} 元"),
+                financial_row("ROE", roe_values, suffix="%", trend=f"{trend_text(roe_values)} {metric_delta(roe_values, suffix='%')}"),
+                financial_row("現金股利（億元）", dividends_values, trend=f"{trend_text(dividends_values)} {metric_delta(dividends_values)} 億元"),
+            ],
+        },
+        {
+            "title": "資產負債與現金流",
+            "rows": [
+                financial_row("現金部位（億元）", cash_values, trend=f"{trend_text(cash_values)} {metric_delta(cash_values)} 億元"),
+                financial_row("流動比率", current_ratio_values, suffix="%", trend=f"{trend_text(current_ratio_values)} {metric_delta(current_ratio_values, suffix='%')}"),
+                financial_row(
+                    "負債比率",
+                    debt_ratio_values,
+                    suffix="%",
+                    trend=f"{trend_text(debt_ratio_values, positive_is_good=False)} {metric_delta(debt_ratio_values, suffix='%')}",
+                    positive_is_good=False,
+                ),
+                financial_row("營業現金流（億元）", operating_cf_values, trend=f"{trend_text(operating_cf_values)} {metric_delta(operating_cf_values)} 億元"),
+                financial_row("自由現金流（億元）", fcf_values, trend=f"{trend_text(fcf_values)} {metric_delta(fcf_values)} 億元"),
+                financial_row("現金流/淨利", cfo_to_net_values, trend=f"{trend_text(cfo_to_net_values)} {metric_delta(cfo_to_net_values)} 倍"),
+            ],
+        },
     ]
 
 
@@ -449,60 +480,258 @@ def make_report(
     }
 
 
-def render_markdown(report: dict) -> str:
+def score_class(score: int) -> str:
+    if score >= 4:
+        return "up"
+    if score == 3:
+        return "neutral"
+    return "down"
+
+
+def per_range_text(band: dict) -> str:
+    low = fmt_per(band["per_low"])
+    high = fmt_per(band["per_high"])
+    if band["score"] == 5:
+        return f"{high} 以下"
+    if band["score"] == 1:
+        return f"{low} 以上"
+    return f"{low}–{high}"
+
+
+def band_chart_value(band: dict) -> float | None:
+    if band["price_low"] is None:
+        return band["price_high"]
+    if band["price_high"] is None:
+        return band["price_low"]
+    return round((band["price_low"] + band["price_high"]) / 2, 2)
+
+
+def render_financial_table(title: str, years: list[str], rows: list[dict]) -> str:
+    header_cells = "".join(f"<th>{esc(year)}</th>" for year in years)
+    body_rows = []
+    for row in rows:
+        value_cells = "".join(f"<td>{esc(value)}</td>" for value in row["values"])
+        body_rows.append(
+            "<tr>"
+            f"<td>{esc(row['label'])}</td>"
+            f"{value_cells}"
+            f"<td class=\"{esc(row['trend_class'])}\">{esc(row['trend'])}</td>"
+            "</tr>"
+        )
+    return (
+        "<div class=\"table-card\">"
+        f"<div class=\"section-title\">{esc(title)}</div>"
+        "<table class=\"data-table\">"
+        f"<thead><tr><th>項目</th>{header_cells}<th>三年變化</th></tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody>"
+        "</table></div>"
+    )
+
+
+def render_band_table(scenario: dict) -> str:
+    rows = []
+    for band in scenario["bands"]:
+        score = band["score"]
+        rows.append(
+            "<tr>"
+            f"<td><span class=\"score-pill score-{score}\">{score} 分</span></td>"
+            f"<td>{esc(band['price_range'])}</td>"
+            f"<td>{esc(per_range_text(band))}</td>"
+            f"<td>{esc(allocation_for_score(score))}</td>"
+            "</tr>"
+        )
+    current = scenario["current_price_view"]
+    current_html = ""
+    if current:
+        current_html = (
+            "<div class=\"current-note\">"
+            f"目前股價 {esc(fmt_price(current['price']))} 元，PER {esc(fmt_per(current['per']))}，"
+            f"<span class=\"{esc(score_class(current['score']))}\">{current['score']} 分</span>"
+            "</div>"
+        )
+    return (
+        "<section class=\"scenario-card\">"
+        "<div class=\"scenario-head\">"
+        f"<div><h3>{esc(scenario['label'])}情境</h3><p>EPS {scenario['eps']:.2f} 元</p></div>"
+        f"{current_html}"
+        "</div>"
+        "<table class=\"data-table valuation-table\">"
+        "<thead><tr><th>分數</th><th>價格區間</th><th>對應 PER</th><th>判讀</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def render_html(report: dict) -> str:
     company = report["company_name"]
     stock_id = report["stock_id"]
     year = report["latest_year"]
     latest_eps = report["latest_eps"]
-    lines = [
-        f"# {company} ({stock_id}) 估值區間",
-        "",
-        f"- 最新年度：`{year}`",
-        f"- 基準 EPS：`{latest_eps:.2f}` 元",
-    ]
-    if report["current_price"] is not None:
-        lines.append(f"- 目前股價：`{report['current_price']:.2f}` 元")
     history = report.get("price_history_summary")
+    years = report["analysis_data"].get("years") or []
+    financial_groups = build_financial_groups(report["analysis_data"])
+    neutral = next(
+        (scenario for scenario in report["scenario_rows"] if scenario["label"] == "中性"),
+        report["scenario_rows"][0],
+    )
+    current = neutral["current_price_view"]
+    neutral_score = f"{current['score']} 分" if current else "未提供現價"
+    neutral_band = next((band for band in neutral["bands"] if band["score"] == 3), None)
+    neutral_range = neutral_band["price_range"] if neutral_band else "-"
+    scenario_labels = [scenario["label"] for scenario in report["scenario_rows"]]
+    scenario_eps_values = [scenario["eps"] for scenario in report["scenario_rows"]]
+    band_labels = [f"{band['score']} 分" for band in neutral["bands"]]
+    band_prices = [band_chart_value(band) for band in neutral["bands"]]
+
+    history_html = ""
     if history:
-        lines.append(
-            f"- 歷史股價區間：`{history['start_date']}` 至 `{history['end_date']}`，收盤價 `{history['close_low']:.2f}`–`{history['close_high']:.2f}` 元"
+        history_html = (
+            "<span class=\"vl\">歷史收盤區間</span>"
+            f"<span>{esc(history['start_date'])}–{esc(history['end_date'])}｜"
+            f"{history['close_low']:.2f}–{history['close_high']:.2f} 元｜"
+            f"最近 {history['latest_close']:.2f} 元（{esc(history['latest_close_date'])}）｜"
+            f"區間位置 {history['range_position_pct']:.2f}% / 百分位 {history['percentile_pct']:.2f}%</span>"
         )
-        lines.append(
-            f"- 最近收盤：`{history['latest_close']:.2f}` 元（`{history['latest_close_date']}`），位於近年區間 `{history['range_position_pct']:.2f}%`，{history['range_position_label']}"
-        )
-        lines.append(
-            f"- 最近收盤百分位：`{history['percentile_pct']:.2f}%`（以區間內所有收盤價排序）"
-        )
-    lines.append("")
-    lines.extend(build_financial_sections(report["analysis_data"]))
 
-    for scenario in report["scenario_rows"]:
-        lines.append(f"## {scenario['label']}情境")
-        lines.append(f"- EPS：`{scenario['eps']:.2f}` 元")
-        lines.append("")
-        lines.append("| 分數 | 價格區間 | 對應 PER | 判讀 |")
-        lines.append("|---|---:|---:|---|")
-        for band in scenario["bands"]:
-            low = fmt_per(band["per_low"])
-            high = fmt_per(band["per_high"])
-            if band["score"] == 5:
-                per_range = f"{high} 以下"
-            elif band["score"] == 1:
-                per_range = f"{low} 以上"
-            else:
-                per_range = f"{low}–{high}"
-            lines.append(
-                f"| {band['score']} | `{band['price_range']}` | `{per_range}` | {allocation_for_score(band['score'])} |"
-            )
-        current = scenario["current_price_view"]
-        if current:
-            lines.append("")
-            lines.append(
-                f"- 目前股價對應：PER `{current['per']:.2f}x`，評分 `{current['score']} 分`"
-            )
-        lines.append("")
+    current_card = (
+        f"<div class=\"kpi-card\"><div class=\"kpi-label\">中性現價評分</div><div class=\"kpi-value\">{esc(neutral_score)}</div><div class=\"kpi-change {esc(score_class(current['score']) if current else 'neutral')}\">"
+        f"{'PER ' + fmt_per(current['per']) if current else '未計算 PER'}</div></div>"
+    )
+    history_card = ""
+    if history:
+        history_card = (
+            "<div class=\"kpi-card\"><div class=\"kpi-label\">近年收盤位置</div>"
+            f"<div class=\"kpi-value\">{history['range_position_pct']:.1f}%</div>"
+            f"<div class=\"kpi-change neutral\">百分位 {history['percentile_pct']:.1f}%｜{esc(history['range_position_label'])}</div></div>"
+        )
 
-    return "\n".join(lines).strip() + "\n"
+    financial_html = "".join(
+        render_financial_table(group["title"], years, group["rows"])
+        for group in financial_groups
+    )
+    scenarios_html = "".join(render_band_table(scenario) for scenario in report["scenario_rows"])
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{esc(company)} ({esc(stock_id)}) 估值區間</title>
+<script src="{CHART_JS_CDN}"></script>
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif; background: #f0f4f8; color: #2d3748; }}
+.header {{ background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 50%, #3182ce 100%); color: white; padding: 24px 32px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }}
+.header h1 {{ font-size: 1.6rem; font-weight: 700; }}
+.subtitle {{ font-size: 0.92rem; opacity: 0.9; margin-top: 6px; }}
+.badge {{ background: rgba(255,255,255,0.15); padding: 8px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; white-space: nowrap; }}
+.verify-bar {{ background: #1a202c; color: #e2e8f0; padding: 8px 32px; font-size: 0.78rem; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
+.verify-bar .vl {{ color: #a0aec0; }}
+.tabs {{ display: flex; background: white; border-bottom: 2px solid #e2e8f0; padding: 0 32px; overflow-x: auto; }}
+.tab {{ appearance: none; background: transparent; border: 0; padding: 14px 24px; cursor: pointer; font-size: 0.95rem; font-weight: 600; color: #718096; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }}
+.tab.active {{ color: #2b6cb0; border-bottom-color: #2b6cb0; }}
+.tab-content {{ display: none; padding: 28px 32px; }}
+.tab-content.active {{ display: block; }}
+.kpi-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }}
+.kpi-card {{ background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-left: 4px solid #3182ce; min-width: 0; }}
+.kpi-label {{ font-size: 0.78rem; color: #718096; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; }}
+.kpi-value {{ font-size: 1.7rem; font-weight: 700; color: #2d3748; line-height: 1.1; overflow-wrap: anywhere; }}
+.kpi-change {{ font-size: 0.82rem; margin-top: 8px; }}
+.up {{ color: #2f855a; }}
+.down {{ color: #c53030; }}
+.neutral {{ color: #718096; }}
+.charts-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }}
+.chart-card, .table-card, .scenario-card {{ background: white; border-radius: 8px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }}
+.chart-title, .section-title {{ font-size: 0.92rem; font-weight: 700; color: #4a5568; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #f0f4f8; }}
+.chart-container {{ position: relative; height: 260px; }}
+.data-table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
+.data-table th {{ background: #2b6cb0; color: white; padding: 10px 14px; text-align: center; }}
+.data-table td {{ padding: 10px 14px; text-align: right; border-bottom: 1px solid #e2e8f0; }}
+.data-table td:first-child {{ text-align: left; font-weight: 600; }}
+.data-table tr:nth-child(even) td {{ background: #f7fafc; }}
+.scenario-head {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 16px; }}
+.scenario-head h3 {{ font-size: 1.05rem; color: #2d3748; }}
+.scenario-head p, .current-note {{ font-size: 0.86rem; color: #718096; margin-top: 6px; }}
+.score-pill {{ display: inline-block; min-width: 48px; padding: 3px 8px; border-radius: 999px; text-align: center; font-size: 0.76rem; font-weight: 700; }}
+.score-5, .score-4 {{ background: #c6f6d5; color: #276749; }}
+.score-3 {{ background: #e2e8f0; color: #4a5568; }}
+.score-2, .score-1 {{ background: #fed7d7; color: #9b2c2c; }}
+@media (max-width: 920px) {{
+  .kpi-row, .charts-grid {{ grid-template-columns: 1fr 1fr; }}
+}}
+@media (max-width: 640px) {{
+  .header {{ flex-direction: column; align-items: flex-start; }}
+  .tab-content {{ padding: 20px 16px; }}
+  .tabs, .verify-bar {{ padding-left: 16px; padding-right: 16px; }}
+  .kpi-row, .charts-grid {{ grid-template-columns: 1fr; }}
+  .scenario-head {{ flex-direction: column; }}
+  .data-table {{ font-size: 0.78rem; }}
+  .data-table th, .data-table td {{ padding: 8px 10px; }}
+}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>{esc(company)} ({esc(stock_id)}) 估值區間儀表板</h1>
+    <div class="subtitle">最新年度：{esc(year)}｜基準 EPS：{latest_eps:.2f} 元｜資料來源：analysis JSON</div>
+  </div>
+  <div class="badge">HTML Valuation Dashboard</div>
+</div>
+<div class="verify-bar">
+  <span class="vl">中性情境</span><span>{neutral['eps']:.2f} EPS｜3 分帶 {esc(neutral_range)}</span>
+  <span class="vl">目前股價</span><span>{esc(fmt_price(report['current_price'])) if report['current_price'] is not None else '-'}</span>
+  {history_html}
+</div>
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('overview', event)">估值總覽</button>
+  <button class="tab" onclick="switchTab('financials', event)">財報整理</button>
+  <button class="tab" onclick="switchTab('scenarios', event)">情境明細</button>
+</div>
+<main>
+  <section id="overview" class="tab-content active">
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="kpi-label">最新年度 EPS</div><div class="kpi-value">{latest_eps:.2f} 元</div><div class="kpi-change neutral">{esc(year)} 年</div></div>
+      <div class="kpi-card"><div class="kpi-label">中性 3 分帶</div><div class="kpi-value">{esc(neutral_range)}</div><div class="kpi-change neutral">PER 9–10x</div></div>
+      {current_card}
+      {history_card}
+    </div>
+    <div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">三情境 EPS</div><div class="chart-container"><canvas id="epsScenarioChart"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">中性情境價格帶</div><div class="chart-container"><canvas id="neutralBandChart"></canvas></div></div>
+    </div>
+    {render_band_table(neutral)}
+  </section>
+  <section id="financials" class="tab-content">
+    {financial_html}
+  </section>
+  <section id="scenarios" class="tab-content">
+    {scenarios_html}
+  </section>
+</main>
+<script>
+function switchTab(name, event) {{
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+  event.currentTarget.classList.add('active');
+}}
+const simpleOptions = {{ responsive: true, maintainAspectRatio: false, scales: {{ x: {{ grid: {{ display: false }} }}, y: {{ grid: {{ color: 'rgba(0,0,0,0.05)' }} }} }} }};
+new Chart(document.getElementById('epsScenarioChart'), {{
+  type: 'bar',
+  data: {{ labels: {json.dumps(scenario_labels, ensure_ascii=False)}, datasets: [{{ label: 'EPS (元)', data: {json.dumps(scenario_eps_values, ensure_ascii=False)}, backgroundColor: ['rgba(229,62,62,0.45)', 'rgba(49,130,206,0.65)', 'rgba(56,161,105,0.55)'], borderColor: ['#c53030', '#2b6cb0', '#2f855a'], borderWidth: 2, borderRadius: 6 }}] }},
+  options: simpleOptions
+}});
+new Chart(document.getElementById('neutralBandChart'), {{
+  type: 'bar',
+  data: {{ labels: {json.dumps(band_labels, ensure_ascii=False)}, datasets: [{{ label: '代表價格 (元)', data: {json.dumps(band_prices, ensure_ascii=False)}, backgroundColor: ['rgba(47,133,90,0.65)', 'rgba(56,161,105,0.55)', 'rgba(113,128,150,0.45)', 'rgba(221,107,32,0.5)', 'rgba(197,48,48,0.5)'], borderRadius: 6 }}] }},
+  options: simpleOptions
+}});
+</script>
+</body>
+</html>
+"""
 
 
 def main() -> int:
@@ -534,7 +763,7 @@ def main() -> int:
     if args.output_format == "json":
         rendered_output = json.dumps(report, ensure_ascii=False, indent=2)
     else:
-        rendered_output = render_markdown(report)
+        rendered_output = render_html(report)
 
     output_path = derive_output_path(
         analysis_json,
@@ -543,7 +772,7 @@ def main() -> int:
         args.output_dir,
     )
     write_report(output_path, rendered_output)
-    print(rendered_output)
+    print(output_path)
     return 0
 
 

@@ -1,6 +1,6 @@
 ---
 name: taiwan-stock-valuation-bands
-description: (Lazyjery 版本)當使用者要把台股財報分析接到股價、計算合理價、拆成悲觀/中性/樂觀三種價格區間、輸出 1-5 分估值評級，或建立估值報告檔案時使用。優先讀取 `*_analysis.json`，並用 `scripts/build_valuation_report.py` 產出 Markdown 或 JSON 報告。
+description: (Lazyjery 版本)當使用者要把台股財報分析接到股價、計算合理價、拆成悲觀/中性/樂觀三種價格區間、輸出 1-5 分估值評級，或建立估值報告檔案時使用。優先讀取 `*_analysis.json`，並用 `scripts/build_valuation_report.py` 產出 HTML 或 JSON 報告。
 ---
 
 # Taiwan Stock Valuation Bands
@@ -82,16 +82,16 @@ python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
   --pessimistic-eps 15 \
   --base-eps 17.5 \
   --optimistic-eps 20 \
-  --output-file docs/report/雄獅_2731_custom_valuation.md
+  --output-file docs/report/雄獅_2731_custom_valuation.html
 ```
 
 腳本行為：
 
 - 讀取 `*_analysis.json`
 - 預設寫出報告檔
-- Markdown 報告會先整理三年財報，再列三種估值情境
+- HTML 報告會先整理三年財報，再列三種估值情境
 - 可帶現價與歷史股價 JSON
-- 可改輸出 `markdown` 或 `json`
+- 可改輸出 `html` 或 `json`
 
 ### 4. 回覆使用者
 
@@ -129,12 +129,13 @@ python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
 python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
   --analysis-json 雄獅_2731_analysis.json \
   --current-price 163.5 \
-  --output-file docs/report/雄獅_2731_valuation_test.md
+  --output-file docs/report/雄獅_2731_valuation_test.html
 ```
 
 確認：
 
 - 報告檔有建立成功
+- 檔案是完整 HTML，包含 `<!DOCTYPE html>` 與分頁區塊
 - 財報整理三段都有輸出
 - 三個情境都有 `1-5 分`
 - 現價評分合理
@@ -151,7 +152,7 @@ python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
 - 可帶入現價
 - 可讀入歷史股價 JSON
 - 可覆寫 EPS 情境
-- 支援 `markdown` / `json`
+- 支援 `html` / `json`
 
 ### `scripts/fetch_price_history.py`
 

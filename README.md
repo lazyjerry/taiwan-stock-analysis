@@ -21,7 +21,7 @@
 
 ### taiwan-stock-valuation-bands
 
-用途：把既有 `*_analysis.json` 轉成三種 EPS 情境的估值帶，並輸出 1–5 分價格區間、現價評分與分批建議。
+用途：把既有 `*_analysis.json` 轉成三種 EPS 情境的估值帶，並輸出 HTML 儀表板，內含 1–5 分價格區間、現價評分與分批建議。
 若另外提供歷史股價 JSON，還會補上近年收盤價區間與百分位。
 
 使用前提：
@@ -68,6 +68,8 @@ python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
     --analysis-json <company>_<stock_id>_analysis.json \
     --current-price 163.5
 ```
+
+預設會輸出 `<company>_<stock_id>_valuation.html`。
 
 若有歷史股價 JSON：
 
