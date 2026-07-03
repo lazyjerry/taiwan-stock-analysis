@@ -66,7 +66,7 @@ unique_path() {
     stem="${fname%.md}"
     n=2
     while :; do
-        candidate="${dir}/${stem} (${n}).md"
+        candidate="${dir}/${stem}-${n}.md"
         if [[ ! -e "$candidate" ]]; then
             printf '%s' "$candidate"
             return

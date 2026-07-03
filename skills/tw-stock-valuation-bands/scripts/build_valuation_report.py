@@ -906,13 +906,13 @@ def resolve_active_file(vault_root: Path) -> str | None:
 
 
 def unique_path(base: Path) -> Path:
-    """若 base 已存在，於檔名尾端加「 (2)」「 (3)」…回傳不重複的新路徑。"""
+    """若 base 已存在，於檔名尾端加「-2」「-3」…回傳不重複的新路徑。"""
     if not base.exists():
         return base
     stem = base.stem
     n = 2
     while True:
-        candidate = base.with_name(f"{stem} ({n}){base.suffix}")
+        candidate = base.with_name(f"{stem}-{n}{base.suffix}")
         if not candidate.exists():
             return candidate
         n += 1
@@ -981,8 +981,8 @@ def main() -> int:
         write_mode = args.write_mode
         if write_mode == "newfile":
             # 不動既有檔，改用預設命名建立不重複的新筆記
-            # 檔名帶「估值」後綴，與 tw-stock-analysis 的「{代碼} {名稱}.md」區隔，避免撞名
-            output_path = unique_path(args.vault_root / f"{stock_id} {company} 估值.md")
+            # 檔名帶「估值」後綴，與 tw-stock-analysis 的「{代碼}-{名稱}.md」區隔，避免撞名
+            output_path = unique_path(args.vault_root / f"{stock_id}-{company}-估值.md")
             target_hint = "建立新檔案"
             write_mode = "overwrite"
         elif args.note_path:
@@ -994,7 +994,7 @@ def main() -> int:
                 output_path = args.vault_root / active_rel
                 target_hint = "Obsidian 當前開啟檔案"
             else:
-                output_path = args.vault_root / f"{stock_id} {company} 估值.md"
+                output_path = args.vault_root / f"{stock_id}-{company}-估值.md"
                 target_hint = "未偵測到當前檔案，改建新筆記"
         write_obsidian_note(output_path, rendered_output, write_mode)
         print(f"{output_path}（{target_hint}，{args.write_mode}）")

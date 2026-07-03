@@ -18,8 +18,8 @@ description: 查詢「任意」台灣上市 ETF（如 0050、0056、00878、0062
 ```
 
 - `<ETF代碼>`（必要）：任意台灣上市 ETF 代號，4-8 位英數，如 `0050`、`00878`、`006208`、`00632R`
-- `[筆記路徑]`（選擇性）：自訂輸出位置（相對 `VAULT_ROOT`）。**省略＝寫入 Obsidian 當前開啟的檔案**（讀 `.obsidian/workspace.json` 的 active leaf）；偵測不到才建立新筆記 `<代碼> <名稱>.md`
-- `[寫入模式]`（選擇性）：`overwrite`（複寫，預設）｜ `append`（附加到檔尾，會去除重複 frontmatter）｜ `newfile`（不動既有檔，改用 `<代碼> <名稱>.md` 建立不重複的新筆記，自動改名避免覆蓋）
+- `[筆記路徑]`（選擇性）：自訂輸出位置（相對 `VAULT_ROOT`）。**省略＝寫入 Obsidian 當前開啟的檔案**（讀 `.obsidian/workspace.json` 的 active leaf）；偵測不到才建立新筆記 `<代碼>-<名稱>.md`
+- `[寫入模式]`（選擇性）：`overwrite`（複寫，預設）｜ `append`（附加到檔尾，會去除重複 frontmatter）｜ `newfile`（不動既有檔，改用 `<代碼>-<名稱>.md` 建立不重複的新筆記，自動改名避免覆蓋）
 - 環境變數 `VAULT_ROOT`（選擇性）：Vault 根目錄，預設為當前目錄 `.`
 
 範例：

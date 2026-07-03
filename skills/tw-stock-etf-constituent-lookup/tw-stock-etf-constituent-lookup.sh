@@ -14,7 +14,7 @@
 #   ./tw-stock-etf-constituent-lookup.sh <ETF代碼> [<筆記路徑>] [<寫入模式>]
 #
 #   <筆記路徑>：省略＝寫入「Obsidian 當前開啟的檔案」（讀 .obsidian/workspace.json
-#               的 active leaf）；偵測不到才建立新筆記 <代碼> <名稱>.md
+#               的 active leaf）；偵測不到才建立新筆記 <代碼>-<名稱>.md
 #   <寫入模式>：overwrite（複寫，預設）｜ append（附加到檔尾）｜ newfile（建立新檔，自動改名）
 #
 # 範例：
@@ -235,7 +235,7 @@ unique_path() {
     stem="${fname%.md}"
     n=2
     while :; do
-        candidate="${dir}/${stem} (${n}).md"
+        candidate="${dir}/${stem}-${n}.md"
         if [[ ! -e "$candidate" ]]; then
             printf '%s' "$candidate"
             return
@@ -383,7 +383,7 @@ main() {
             note_path="${VAULT_ROOT}/${active_rel}"
             print_info "筆記位置：${note_path}（Obsidian 當前開啟檔案）"
         else
-            note_path="${VAULT_ROOT}/${ETF_CODE} ${etf_name}.md"
+            note_path="${VAULT_ROOT}/${ETF_CODE}-${etf_name}.md"
             print_info "筆記位置：${note_path}（未偵測到當前檔案，改建新筆記）"
         fi
     fi
@@ -433,7 +433,7 @@ main() {
 
     # newfile：不動既有檔，改用預設命名建立不重複的新筆記
     if [[ "$mode" == "newfile" ]]; then
-        note_path="$(unique_path "${VAULT_ROOT}/${ETF_CODE} ${etf_name}.md")"
+        note_path="$(unique_path "${VAULT_ROOT}/${ETF_CODE}-${etf_name}.md")"
         print_info "改建立新檔案：${note_path}"
         mode="overwrite"
     fi
