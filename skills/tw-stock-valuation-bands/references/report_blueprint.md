@@ -44,7 +44,7 @@ HTML 報告固定分成三個分頁：
 
 ## 財報整理用語
 
-報告段名與列名要偏整理式，不直接照抄 `taiwan-stock-analysis` skill：
+報告段名與列名要偏整理式，不直接照抄 `tw-stock-analysis` skill：
 
 - 可用：`營運規模與成本結構`
 - 可用：`獲利與股東報酬`

@@ -1,0 +1,82 @@
+name: tw-stock-etf-constituent-lookup
+title: ETF 成分股查詢
+description: 查詢台灣ETF的成分股資訊，自動創建或更新筆記
+category: finance
+version: 1.0.0
+
+# 觸發詞
+triggers:
+  - "查詢ETF成分股"
+  - "ETF成分股"
+  - "查詢0050"
+  - "查詢0056"
+  - "0050成分股"
+  - "0056成分股"
+  - "建立ETF筆記"
+
+# 使用方式
+usage: |
+  ### 基本用法
+  查詢特定ETF的成分股並創建筆記：
+
+  ```bash
+  ./.claude/skills/tw-stock-etf-constituent-lookup.sh <ETF代碼> [筆記路徑]
+  ```
+
+  ### 參數
+  - `<ETF代碼>` (必要)：ETF代碼，如 0050、0056
+  - `[筆記路徑]` (選擇性)：自訂筆記位置，如 finances/0050.md
+
+  ### 範例
+  ```bash
+  # 查詢0050，自動創建筆記
+  ./.claude/skills/tw-stock-etf-constituent-lookup.sh 0050
+
+  # 查詢0056，指定筆記位置
+  ./.claude/skills/tw-stock-etf-constituent-lookup.sh 0056 "finances/0056.md"
+  ```
+
+# 支持的ETF
+supported_etfs:
+  - code: "0050"
+    name: "元大台灣卓越50"
+    en_name: "Yuanta Taiwan Top 50 ETF"
+    index: "臺灣50指數"
+    category: "台灣大型股"
+
+  - code: "0056"
+    name: "元大台灣高股息"
+    en_name: "Yuanta/P-shares Taiwan Dividend+ ETF"
+    index: "臺灣高股息指數"
+    category: "台灣高股息"
+
+# 功能
+features:
+  - 自動查詢ETF成分股
+  - 抓取官方最新數據
+  - 自動生成標準化筆記
+  - 支持自訂筆記位置
+  - 中英文元數據
+
+# 輸出
+outputs:
+  - Markdown筆記（含成分股表格、基本資訊、投資特色）
+  - 控制台提示和進度指示
+
+# 配置
+config:
+  vault_root: "."
+  note_template: "{CODE} {NAME}.md"
+  data_sources:
+    - "https://www.yuantaetfs.com/product/detail/{CODE}/ratio"
+    - "Yahoo股市"
+    - "MoneyDJ"
+
+# 依賴
+dependencies:
+  - curl (用於抓取網頁內容)
+  - bash (4.0+)
+
+# 作者
+author: "Claude Code"
+created: "2026-07-03"

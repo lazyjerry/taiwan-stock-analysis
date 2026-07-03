@@ -341,7 +341,7 @@ if __name__ == '__main__':
                 2,
                 '錯誤：fetch_goodinfo.py 只抓財報，不支援 --months / --market / --output。\n'
                 '若要抓歷史股價，請改用：\n'
-                'python3 skills/taiwan-stock-valuation-bands/scripts/fetch_price_history.py <stock_id> --months 36\n',
+                'python3 skills/tw-stock-valuation-bands/scripts/fetch_price_history.py <stock_id> --months 36\n',
             )
         parser.error(f"unrecognized arguments: {' '.join(unknown)}")
 

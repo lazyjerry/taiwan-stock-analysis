@@ -2,12 +2,12 @@
 
 這個 repo 目前包含兩個以台股為核心的 skill：
 
-- `taiwan-stock-analysis`：抓取 MOPS 官方財報頁資料，整理成三維財務分析結果
-- `taiwan-stock-valuation-bands`：把既有分析結果轉成悲觀／中性／樂觀三種估值區間與 1–5 分評級
+- `tw-stock-analysis`：抓取 MOPS 官方財報頁資料，整理成三維財務分析結果
+- `tw-stock-valuation-bands`：把既有分析結果轉成悲觀／中性／樂觀三種估值區間與 1–5 分評級
 
 ## Skills
 
-### taiwan-stock-analysis
+### tw-stock-analysis
 
 用途：輸入股票代號後，抓取公開財報數據，整理經營分析、獲利分析、財務健全度。
 
@@ -19,7 +19,7 @@
 | 獲利分析 | 稅後淨利、EPS、ROE、ROA、三層利潤率比較、現金股利 |
 | 財務健全度 | 現金部位、流動比率、負債比率、營業現金流、自由現金流 |
 
-### taiwan-stock-valuation-bands
+### tw-stock-valuation-bands
 
 用途：把既有 `*_analysis.json` 轉成三種 EPS 情境的估值帶，並輸出 HTML 儀表板，內含 1–5 分價格區間、現價評分與分批建議。
 若另外提供歷史股價 JSON，還會補上近年收盤價區間與百分位。
@@ -37,7 +37,7 @@
 從 repo 根目錄可執行：
 
 ```bash
-python3 skills/taiwan-stock-analysis/scripts/fetch_goodinfo.py <stock_id>
+python3 skills/tw-stock-analysis/scripts/fetch_goodinfo.py <stock_id>
 ```
 
 這支腳本沿用舊檔名，但目前實際改由 MOPS 官方財報頁抓資料，會輸出 `<stock_id>_goodinfo_raw_data.json`。
@@ -45,7 +45,7 @@ python3 skills/taiwan-stock-analysis/scripts/fetch_goodinfo.py <stock_id>
 若要把 raw JSON 轉成三分頁 HTML 儀表板：
 
 ```bash
-python3 skills/taiwan-stock-analysis/scripts/build_analysis_dashboard.py \
+python3 skills/tw-stock-analysis/scripts/build_analysis_dashboard.py \
     --raw-json <stock_id>_goodinfo_raw_data.json \
     --price-history-json <stock_id>_twse_price_history.json \
     --output <company>_<stock_id>_analysis.html
@@ -58,13 +58,13 @@ python3 skills/taiwan-stock-analysis/scripts/build_analysis_dashboard.py \
 若要補歷史股價，可先抓上市股票的公開日價資料：
 
 ```bash
-python3 skills/taiwan-stock-valuation-bands/scripts/fetch_price_history.py 2330 --months 36
+python3 skills/tw-stock-valuation-bands/scripts/fetch_price_history.py 2330 --months 36
 ```
 
 預設會輸出 `<stock_id>_<market>_price_history.json`，例如 `2330_twse_price_history.json`。
 
 ```bash
-python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
+python3 skills/tw-stock-valuation-bands/scripts/build_valuation_report.py \
     --analysis-json <company>_<stock_id>_analysis.json \
     --current-price 163.5
 ```
@@ -74,7 +74,7 @@ python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
 若有歷史股價 JSON：
 
 ```bash
-python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
+python3 skills/tw-stock-valuation-bands/scripts/build_valuation_report.py \
     --analysis-json <company>_<stock_id>_analysis.json \
     --current-price 163.5 \
     --price-history-json <stock_id>_<market>_price_history.json
@@ -89,14 +89,14 @@ python3 skills/taiwan-stock-valuation-bands/scripts/build_valuation_report.py \
 taiwan-stock-analysis/
 ├── README.md
 ├── skills/
-│   ├── taiwan-stock-analysis/
+│   ├── tw-stock-analysis/
 │   │   ├── SKILL.md
 │   │   ├── references/
 │   │   │   └── dashboard_template.md
 │   │   └── scripts/
 │   │       ├── build_analysis_dashboard.py
 │   │       └── fetch_goodinfo.py
-│   └── taiwan-stock-valuation-bands/
+│   └── tw-stock-valuation-bands/
 │       ├── SKILL.md
 │       ├── references/
 │       │   └── methodology.md
