@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import html
 import json
 import math
@@ -67,9 +68,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-format",
-        choices=("html", "json"),
-        default="html",
-        help="Report format",
+        choices=("md", "html", "json"),
+        default="md",
+        help="Report format (預設 md：寫入 Obsidian 當前開啟的筆記)",
     )
     parser.add_argument(
         "--output-file",
@@ -80,6 +81,22 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         type=Path,
         help="Write the report into a directory; filename is derived from analysis JSON",
+    )
+    parser.add_argument(
+        "--vault-root",
+        type=Path,
+        default=Path("."),
+        help="Obsidian Vault 根目錄（md 格式偵測當前開啟檔用），預設當前目錄",
+    )
+    parser.add_argument(
+        "--note-path",
+        help="自訂 Obsidian 筆記路徑（相對 --vault-root）；省略＝寫入當前開啟的檔案（僅 md 格式）",
+    )
+    parser.add_argument(
+        "--write-mode",
+        choices=("overwrite", "append"),
+        default="overwrite",
+        help="md 寫入模式：overwrite（複寫，預設）｜append（附加到檔尾，去重 frontmatter）",
     )
     parser.add_argument("--pessimistic-eps", type=float, help="Override pessimistic EPS")
     parser.add_argument("--base-eps", type=float, help="Override base EPS")
@@ -301,7 +318,7 @@ def derive_output_path(
     if output_file is not None:
         return output_file
 
-    suffix = ".json" if output_format == "json" else ".html"
+    suffix = {"json": ".json", "md": ".md"}.get(output_format, ".html")
     stem = analysis_json.stem
     if stem.endswith("_analysis"):
         report_name = f"{stem[:-9]}_valuation{suffix}"
@@ -734,6 +751,179 @@ new Chart(document.getElementById('neutralBandChart'), {{
 """
 
 
+def render_markdown(report: dict) -> str:
+    company = report["company_name"]
+    stock_id = report["stock_id"]
+    year = report["latest_year"]
+    latest_eps = report["latest_eps"]
+    history = report.get("price_history_summary")
+    current_price = report["current_price"]
+    years = report["analysis_data"].get("years") or []
+    financial_groups = build_financial_groups(report["analysis_data"])
+    today = datetime.date.today().isoformat()
+
+    neutral = next(
+        (scenario for scenario in report["scenario_rows"] if scenario["label"] == "中性"),
+        report["scenario_rows"][0],
+    )
+    neutral_current = neutral["current_price_view"]
+    neutral_band = next((band for band in neutral["bands"] if band["score"] == 3), None)
+    neutral_range = neutral_band["price_range"] if neutral_band else "-"
+    current_score_text = f"{neutral_current['score']} 分" if neutral_current else "未提供現價"
+
+    lines: list[str] = []
+    lines.append("---")
+    lines.append(f"ticker: {stock_id}")
+    lines.append(f"name: {company}")
+    lines.append("type: 個股")
+    lines.append("report: 估值區間")
+    lines.append("source: analysis JSON")
+    lines.append(f"latest_year: {year}")
+    lines.append(f"base_eps: {latest_eps:.2f}")
+    lines.append(f"current_price: {fmt_price(current_price) if current_price is not None else '-'}")
+    lines.append(f"current_score: {current_score_text}")
+    lines.append(f"last_updated: {today}")
+    lines.append("---")
+    lines.append("")
+    lines.append(f"# {company}（{stock_id}）估值區間報告")
+    lines.append("")
+
+    # 基本資訊
+    lines.append("## 基本資訊")
+    lines.append("")
+    lines.append("| 項目 | 內容 |")
+    lines.append("|------|------|")
+    lines.append(f"| **股票代碼** | {stock_id} |")
+    lines.append(f"| **公司名稱** | {company} |")
+    lines.append(f"| **最新年度** | {year} |")
+    lines.append(f"| **基準 EPS** | {latest_eps:.2f} 元 |")
+    lines.append(f"| **中性 3 分帶** | {neutral_range}（PER 9–10x） |")
+    lines.append(
+        f"| **目前股價** | {fmt_price(current_price) + ' 元' if current_price is not None else '–'} |"
+    )
+    lines.append(f"| **中性現價評分** | {current_score_text} |")
+    lines.append(f"| **更新日期** | {today} |")
+    lines.append("")
+
+    # 三年財報摘要
+    if financial_groups and years:
+        lines.append("## 三年財報摘要")
+        lines.append("")
+        header = "| 項目 | " + " | ".join(str(y) for y in years) + " | 三年變化 |"
+        divider = "|------|" + "------|" * len(years) + "------|"
+        for group in financial_groups:
+            lines.append(f"### {group['title']}")
+            lines.append("")
+            lines.append(header)
+            lines.append(divider)
+            for row in group["rows"]:
+                cells = " | ".join(row["values"])
+                lines.append(f"| {row['label']} | {cells} | {row['trend']} |")
+            lines.append("")
+
+    # 估值情境
+    lines.append("## 估值情境（1–5 分價格帶）")
+    lines.append("")
+    for scenario in report["scenario_rows"]:
+        lines.append(f"### {scenario['label']}情境（EPS {scenario['eps']:.2f} 元）")
+        lines.append("")
+        lines.append("| 分數 | 價格區間 | 對應 PER | 判讀 |")
+        lines.append("|------|----------|----------|------|")
+        for band in scenario["bands"]:
+            score = band["score"]
+            lines.append(
+                f"| {score} 分 | {band['price_range']} | {per_range_text(band)} | {allocation_for_score(score)} |"
+            )
+        current = scenario["current_price_view"]
+        if current:
+            lines.append("")
+            lines.append(
+                f"> 目前股價 {fmt_price(current['price'])} 元，PER {fmt_per(current['per'])} → **{current['score']} 分**"
+            )
+        lines.append("")
+
+    # 近年股價位置
+    if history:
+        lines.append("## 近年股價位置")
+        lines.append("")
+        lines.append("| 項目 | 內容 |")
+        lines.append("|------|------|")
+        lines.append(f"| **統計區間** | {history['start_date']}–{history['end_date']}（{history['trading_days']} 個交易日） |")
+        lines.append(f"| **收盤區間** | {history['close_low']:.2f}–{history['close_high']:.2f} 元 |")
+        lines.append(f"| **最近收盤** | {history['latest_close']:.2f} 元（{history['latest_close_date']}） |")
+        lines.append(f"| **區間位置** | {history['range_position_pct']:.2f}%（{history['range_position_label']}） |")
+        lines.append(f"| **百分位** | {history['percentile_pct']:.2f}% |")
+        lines.append("")
+
+    # 官方／證交所查核連結
+    lines.append("## 官方／證交所查核連結")
+    lines.append("")
+    lines.append(f"- [MOPS 公開資訊觀測站（上市 {stock_id}）](https://mops.twse.com.tw/mops/web/t05st01?step=1&co_id={stock_id}&TYPEK=sii)")
+    lines.append(f"- [MOPS 公開資訊觀測站（上櫃 {stock_id}）](https://mops.twse.com.tw/mops/web/t05st01?step=1&co_id={stock_id}&TYPEK=otc)")
+    lines.append(f"- [臺灣證券交易所 個股日成交（{stock_id}）](https://www.twse.com.tw/zh/trading/historical/stock-day.html)")
+    lines.append(f"- [Yahoo 股市（{stock_id}）](https://tw.stock.yahoo.com/quote/{stock_id}.TW)")
+    lines.append(f"- [Goodinfo 個股（{stock_id}）](https://goodinfo.tw/tw/StockInfo/StockDetail.asp?STOCK_ID={stock_id})")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.append(f"**最後更新：** {today}")
+    lines.append("")
+    lines.append("**注**：估值帶依最新年度 EPS 與固定 PER 帶推導，僅為參考；EPS 與股價會隨市場變化，最新資料請點上方連結核對。")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def resolve_active_file(vault_root: Path) -> str | None:
+    """讀 .obsidian/workspace.json 的 active leaf，回傳相對 vault 的 .md 路徑。"""
+    ws = vault_root / ".obsidian" / "workspace.json"
+    if not ws.is_file():
+        return None
+    try:
+        data = json.loads(ws.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    active = data.get("active")
+    found: list[str | None] = [None]
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "leaf" and node.get("id") == active:
+                state = node.get("state", {})
+                if state.get("type") == "markdown":
+                    found[0] = state.get("state", {}).get("file")
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    for key in ("main", "left", "right"):
+        walk(data.get(key, {}))
+    result = found[0]
+    if result and result.endswith(".md"):
+        return result
+    return None
+
+
+def write_obsidian_note(path: Path, content: str, mode: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "append" and path.exists() and path.stat().st_size > 0:
+        lines = content.splitlines()
+        count = 0
+        body_start = 0
+        for index, line in enumerate(lines):
+            if line == "---":
+                count += 1
+                if count == 2:
+                    body_start = index + 1
+                    break
+        body = "\n".join(lines[body_start:]) if count >= 2 else content
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write("\n" + body.rstrip("\n") + "\n")
+    else:
+        path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
+
+
 def main() -> int:
     args = parse_args()
     analysis_json = args.analysis_json
@@ -762,8 +952,33 @@ def main() -> int:
     report = make_report(data, scenarios, args.current_price, price_history)
     if args.output_format == "json":
         rendered_output = json.dumps(report, ensure_ascii=False, indent=2)
+    elif args.output_format == "md":
+        rendered_output = render_markdown(report)
     else:
         rendered_output = render_html(report)
+
+    # md 且未指定輸出檔／輸出資料夾 → 預設寫入 Obsidian 當前開啟的檔案
+    if (
+        args.output_format == "md"
+        and args.output_file is None
+        and args.output_dir is None
+    ):
+        if args.note_path:
+            output_path = args.vault_root / args.note_path
+            target_hint = "指定路徑"
+        else:
+            active_rel = resolve_active_file(args.vault_root)
+            if active_rel:
+                output_path = args.vault_root / active_rel
+                target_hint = "Obsidian 當前開啟檔案"
+            else:
+                company = report["company_name"]
+                stock_id = report["stock_id"]
+                output_path = args.vault_root / f"{company}_{stock_id}_valuation.md"
+                target_hint = "未偵測到當前檔案，改建新筆記"
+        write_obsidian_note(output_path, rendered_output, args.write_mode)
+        print(f"{output_path}（{target_hint}，{args.write_mode}）")
+        return 0
 
     output_path = derive_output_path(
         analysis_json,

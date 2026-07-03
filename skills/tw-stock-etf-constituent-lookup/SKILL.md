@@ -11,10 +11,10 @@ description: 查詢「任意」台灣上市 ETF（如 0050、0056、00878、0062
 
 ## 使用方式
 
-在 Vault 根目錄執行（路徑含 skill 子目錄一層）：
+腳本 `tw-stock-etf-constituent-lookup.sh` 與本 `SKILL.md` 同層。以下範例的 `$SKILL_DIR` 代表本 skill 所在目錄（依實際安裝位置而定，可能在專案 `skills/`、`.claude/skills/` 或全域 `~/.claude/skills/`）。呼叫前以本檔案所在目錄取代，例如 `SKILL_DIR="$(dirname SKILL.md 所在路徑)"`。
 
 ```bash
-./.claude/skills/tw-stock-etf-constituent-lookup/tw-stock-etf-constituent-lookup.sh <ETF代碼> [筆記路徑] [寫入模式]
+"$SKILL_DIR/tw-stock-etf-constituent-lookup.sh" <ETF代碼> [筆記路徑] [寫入模式]
 ```
 
 - `<ETF代碼>`（必要）：任意台灣上市 ETF 代號，4-8 位英數，如 `0050`、`00878`、`006208`、`00632R`
@@ -26,13 +26,13 @@ description: 查詢「任意」台灣上市 ETF（如 0050、0056、00878、0062
 
 ```bash
 # 寫入 Obsidian 當前開啟的檔案
-./.claude/skills/tw-stock-etf-constituent-lookup/tw-stock-etf-constituent-lookup.sh 0050
+"$SKILL_DIR/tw-stock-etf-constituent-lookup.sh" 0050
 
 # 附加到當前開啟的檔案（保留原內容）
-./.claude/skills/tw-stock-etf-constituent-lookup/tw-stock-etf-constituent-lookup.sh 0050 "" append
+"$SKILL_DIR/tw-stock-etf-constituent-lookup.sh" 0050 "" append
 
 # 指定路徑
-./.claude/skills/tw-stock-etf-constituent-lookup/tw-stock-etf-constituent-lookup.sh 00878 "finances/00878.md"
+"$SKILL_DIR/tw-stock-etf-constituent-lookup.sh" 00878 "finances/00878.md"
 ```
 
 ## 寫入目標與模式（代理務必遵守）

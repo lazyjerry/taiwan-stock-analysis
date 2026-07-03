@@ -4,43 +4,38 @@
 
 這份規格提供 `build_valuation_report.py` 的報告輸出結構，讓主 skill 只保留流程與決策點。
 
-## 報告檔案位置
+## 報告寫入位置
 
-執行估值報告前，先問使用者報告要放哪裡：
+**預設（`md` 格式）＝寫入 Obsidian 當前開啟的檔案**（讀 `--vault-root/.obsidian/workspace.json` 的 `active` leaf）：
 
-- 預設：和 `*_analysis.json` 同資料夾
-- 自訂資料夾：帶 `--output-dir <dir>`
-- 自訂完整檔名：帶 `--output-file <path>`
+- 預設：Obsidian 當前開啟的檔案；偵測不到才建新筆記 `<公司>_<代碼>_valuation.md`
+- 指定筆記路徑：帶 `--note-path <相對 vault 路徑>`
+- 寫入模式：`--write-mode overwrite`（複寫，預設）｜ `append`（附加，去重 frontmatter）
+- Vault 根目錄：`--vault-root <dir>`（預設 `.`）
 
-預設命名規則：
+改輸出檔案（非 Obsidian）：
 
-- `鴻海_2317_analysis.json` -> `鴻海_2317_valuation.html`
-- 若輸出格式是 JSON，副檔名改為 `.json`
+- HTML／JSON：帶 `--output-format html｜json`，配合 `--output-dir` 或 `--output-file`
+- 檔名推導：`鴻海_2317_analysis.json` -> `鴻海_2317_valuation.{md｜html｜json}`
 
 ## 報告段落
 
-HTML 報告固定分成三個分頁：
+### Markdown 報告（預設，寫入 Obsidian）固定結構
 
-1. 估值總覽
-- 公司名稱、股票代號、最新年度、基準 EPS
-- 若有現價，列出目前股價
-- 若有歷史股價 JSON，列出近年收盤區間、最近收盤位置、百分位
-- 顯示三情境 EPS 與中性情境價格帶圖表
+1. YAML frontmatter：`ticker`、`name`、`type: 個股`、`report: 估值區間`、`latest_year`、`base_eps`、`current_price`、`current_score`、`last_updated`
+2. 基本資訊表：股票代碼、公司名稱、最新年度、基準 EPS、中性 3 分帶、目前股價、現價評分、更新日期
+3. 三年財報摘要（三張表，見下方用語）
+4. 估值情境（1–5 分價格帶）：悲觀 / 中性 / 樂觀 三張表，每張含價格區間、對應 PER、判讀；有現價時附現價 PER 與分數
+5. 近年股價位置（若帶歷史股價 JSON）
+6. 官方／證交所查核連結：MOPS（上市/上櫃）、證交所、Yahoo、Goodinfo
 
-2. 財報整理
-- 直接整理 `*_analysis.json` 的 `metrics_by_year`
-- 用重新撰寫過的段名，不直接複製財報分析 skill 原文
-- 建議拆成三張表：
-  - 營運規模與成本結構
-  - 獲利與股東報酬
-  - 資產負債與現金流
+### HTML 報告分頁（`--output-format html`）
 
-3. 情境明細
-- 悲觀 / 中性 / 樂觀 EPS
-- 每個情境都要列出 `1-5 分` 價格區間、對應 PER、判讀
-- 若有現價，補現價對應的 PER 與分數
-- 由代理在最終回覆中摘出中性情境區間、現價分數、偏便宜或偏貴判讀
-- 若使用者只要摘要，不必把整份 HTML 全貼出來
+1. 估值總覽：公司名稱、股票代號、最新年度、基準 EPS、現價、歷史股價、三情境 EPS 與中性價格帶圖表
+2. 財報整理：整理 `metrics_by_year`，用重寫過的段名，拆三張表
+3. 情境明細：悲觀 / 中性 / 樂觀，各列 `1-5 分` 區間、對應 PER、判讀
+
+代理在最終回覆中摘出中性情境區間、現價分數、偏便宜或偏貴判讀；若使用者只要摘要，不必整份貼出。
 
 ## 財報整理用語
 
@@ -78,7 +73,8 @@ HTML 報告固定分成三個分頁：
 
 ## 代理執行提醒
 
-- 先確認使用者要預設路徑還是自訂路徑，再跑腳本
-- 若未指定輸出路徑，回覆中要明講報告建立在 `*_analysis.json` 同資料夾
-- 若指定 `--output-file`，回覆中要明講完整檔案路徑
+- 預設寫入 Obsidian 當前開啟的檔案；**若該檔已有內容，先問複寫或附加**，再傳 `--write-mode`
+- 使用者若指定筆記路徑，帶 `--note-path`，略過偵測
+- 回覆中要明講報告寫入了哪個檔案（當前開啟檔／指定路徑／新建檔）與寫入模式
+- 若改用 HTML／JSON，帶 `--output-format` 並在回覆中明講完整檔案路徑
 - 若只有 `*_analysis.json` 沒有現價，照樣建立報告，只是不做現價評分
