@@ -8,9 +8,10 @@
 
 **預設（`md` 格式）＝寫入 Obsidian 當前開啟的檔案**（讀 `--vault-root/.obsidian/workspace.json` 的 `active` leaf）：
 
-- 預設：Obsidian 當前開啟的檔案；偵測不到才建新筆記 `<代碼> <名稱>.md`（如 `2330 台積電.md`）
+- 預設：Obsidian 當前開啟的檔案；偵測不到才建新筆記 `<代碼> <名稱> 估值.md`（如 `2330 台積電 估值.md`）
 - 指定筆記路徑：帶 `--note-path <相對 vault 路徑>`
 - 寫入模式：`--write-mode overwrite`（複寫，預設）｜ `append`（附加，去重 frontmatter）｜ `newfile`（建立新檔，自動改名）
+- 新檔名帶「估值」後綴，與 `tw-stock-analysis` 的 `<代碼> <名稱>.md` 區隔，避免撞名
 - Vault 根目錄：`--vault-root <dir>`（預設 `.`）
 
 改輸出檔案（非 Obsidian）：
