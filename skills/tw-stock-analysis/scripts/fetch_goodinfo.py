@@ -96,7 +96,7 @@ def fetch_statement_html(session, stock_id, roc_year, market, page_id):
         raise RuntimeError(
             f'MOPS 回傳空內容：stock_id={stock_id} year={roc_year} market={market} page={page_id}'
         )
-    if '查詢無資料' in html or '查無所需資料' in html:
+    if '查詢無資料' in html or '查無所需資料' in html or '查無公司資料' in html:
         return None
     return html
 

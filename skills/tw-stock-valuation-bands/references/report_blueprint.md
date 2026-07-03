@@ -10,7 +10,7 @@
 
 - 預設：Obsidian 當前開啟的檔案；偵測不到才建新筆記 `<公司>_<代碼>_valuation.md`
 - 指定筆記路徑：帶 `--note-path <相對 vault 路徑>`
-- 寫入模式：`--write-mode overwrite`（複寫，預設）｜ `append`（附加，去重 frontmatter）
+- 寫入模式：`--write-mode overwrite`（複寫，預設）｜ `append`（附加，去重 frontmatter）｜ `newfile`（建立新檔，自動改名）
 - Vault 根目錄：`--vault-root <dir>`（預設 `.`）
 
 改輸出檔案（非 Obsidian）：
@@ -73,7 +73,7 @@
 
 ## 代理執行提醒
 
-- 預設寫入 Obsidian 當前開啟的檔案；**若該檔已有內容，先問複寫或附加**，再傳 `--write-mode`
+- 預設寫入 Obsidian 當前開啟的檔案；**若該檔已有內容，先讓使用者三選一**（複寫 `overwrite`／附加 `append`／建立新檔 `newfile`），再傳 `--write-mode`
 - 使用者若指定筆記路徑，帶 `--note-path`，略過偵測
 - 回覆中要明講報告寫入了哪個檔案（當前開啟檔／指定路徑／新建檔）與寫入模式
 - 若改用 HTML／JSON，帶 `--output-format` 並在回覆中明講完整檔案路徑

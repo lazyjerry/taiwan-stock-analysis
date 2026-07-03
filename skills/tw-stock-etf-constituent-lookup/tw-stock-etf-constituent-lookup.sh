@@ -15,7 +15,7 @@
 #
 #   <筆記路徑>：省略＝寫入「Obsidian 當前開啟的檔案」（讀 .obsidian/workspace.json
 #               的 active leaf）；偵測不到才建立新筆記 <代碼> <名稱>.md
-#   <寫入模式>：overwrite（複寫，預設）｜ append（附加到檔尾）
+#   <寫入模式>：overwrite（複寫，預設）｜ append（附加到檔尾）｜ newfile（建立新檔，自動改名）
 #
 # 範例：
 #   ./tw-stock-etf-constituent-lookup.sh 0050
@@ -97,7 +97,7 @@ usage() {
 
   <ETF代碼>  台灣上市 ETF 代號（任意），如 0050、00878、006208、00919
   [筆記路徑] 選填；省略＝寫入 Obsidian 當前開啟的檔案，偵測不到才建新筆記
-  [寫入模式] 選填；overwrite（複寫，預設）｜ append（附加到檔尾）
+  [寫入模式] 選填；overwrite（複寫，預設）｜ append（附加到檔尾）｜ newfile（建立新檔，自動改名）
 
 範例：
   ./tw-stock-etf-constituent-lookup.sh 0050                  # 寫入當前開啟檔案
@@ -221,6 +221,27 @@ build_holdings_table() {
         printf '| %d | %s | %s | %s | %s |\n' "$rank" "$code" "$name" "$weight" "$shares"
         rank=$((rank + 1))
     done < "$f"
+}
+
+# 給定目標路徑，若已存在則在檔名尾端加「 (2)」「 (3)」…回傳不重複的新路徑
+unique_path() {
+    local base="$1" dir fname stem candidate n
+    if [[ ! -e "$base" ]]; then
+        printf '%s' "$base"
+        return
+    fi
+    dir="$(dirname "$base")"
+    fname="$(basename "$base")"
+    stem="${fname%.md}"
+    n=2
+    while :; do
+        candidate="${dir}/${stem} (${n}).md"
+        if [[ ! -e "$candidate" ]]; then
+            printf '%s' "$candidate"
+            return
+        fi
+        n=$((n + 1))
+    done
 }
 
 # ============================================================================
@@ -387,26 +408,34 @@ main() {
         "$ETF_CODE" "$etf_name" "$count" "$scope_label" "$table" \
         "$primary_ref" "$source_tag" "$factcheck_links" "$extra_refs")"
 
-    # ------- 決定寫入模式（複寫 / 附加）-------
+    # ------- 決定寫入模式（複寫 / 附加 / 建立新檔）-------
     local mode="$WRITE_MODE" ans
     if [[ -z "$mode" ]]; then
         if [[ -s "$note_path" ]]; then
             if [[ -t 0 ]]; then
                 printf '\n目標檔案已有內容：%s\n' "$note_path"
-                printf '[o] 複寫（預設）  [a] 附加到檔尾  [c] 取消 > '
+                printf '[o] 複寫（預設）  [a] 附加到檔尾  [n] 建立新檔案（自動改名）  [c] 取消 > '
                 read -r ans || ans=""
                 case "$ans" in
                     a|A) mode="append" ;;
+                    n|N) mode="newfile" ;;
                     c|C) print_warn "已取消，未寫入"; print_footer; exit 0 ;;
                     *)   mode="overwrite" ;;
                 esac
             else
                 mode="overwrite"
-                print_warn "目標已有內容，非互動模式預設複寫（要附加請傳第三參數 append）"
+                print_warn "目標已有內容，非互動模式預設複寫（附加請傳 append，建立新檔請傳 newfile）"
             fi
         else
             mode="overwrite"
         fi
+    fi
+
+    # newfile：不動既有檔，改用預設命名建立不重複的新筆記
+    if [[ "$mode" == "newfile" ]]; then
+        note_path="$(unique_path "${VAULT_ROOT}/${ETF_CODE} ${etf_name}.md")"
+        print_info "改建立新檔案：${note_path}"
+        mode="overwrite"
     fi
 
     local note_dir; note_dir="$(dirname "$note_path")"

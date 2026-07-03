@@ -94,9 +94,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--write-mode",
-        choices=("overwrite", "append"),
+        choices=("overwrite", "append", "newfile"),
         default="overwrite",
-        help="md 寫入模式：overwrite（複寫，預設）｜append（附加到檔尾，去重 frontmatter）",
+        help="md 寫入模式：overwrite（複寫，預設）｜append（附加，去重 frontmatter）｜newfile（建立新檔，自動改名）",
     )
     parser.add_argument("--pessimistic-eps", type=float, help="Override pessimistic EPS")
     parser.add_argument("--base-eps", type=float, help="Override base EPS")
@@ -905,6 +905,19 @@ def resolve_active_file(vault_root: Path) -> str | None:
     return None
 
 
+def unique_path(base: Path) -> Path:
+    """若 base 已存在，於檔名尾端加「 (2)」「 (3)」…回傳不重複的新路徑。"""
+    if not base.exists():
+        return base
+    stem = base.stem
+    n = 2
+    while True:
+        candidate = base.with_name(f"{stem} ({n}){base.suffix}")
+        if not candidate.exists():
+            return candidate
+        n += 1
+
+
 def write_obsidian_note(path: Path, content: str, mode: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if mode == "append" and path.exists() and path.stat().st_size > 0:
@@ -963,7 +976,15 @@ def main() -> int:
         and args.output_file is None
         and args.output_dir is None
     ):
-        if args.note_path:
+        company = report["company_name"]
+        stock_id = report["stock_id"]
+        write_mode = args.write_mode
+        if write_mode == "newfile":
+            # 不動既有檔，改用預設命名建立不重複的新筆記
+            output_path = unique_path(args.vault_root / f"{company}_{stock_id}_valuation.md")
+            target_hint = "建立新檔案"
+            write_mode = "overwrite"
+        elif args.note_path:
             output_path = args.vault_root / args.note_path
             target_hint = "指定路徑"
         else:
@@ -972,11 +993,9 @@ def main() -> int:
                 output_path = args.vault_root / active_rel
                 target_hint = "Obsidian 當前開啟檔案"
             else:
-                company = report["company_name"]
-                stock_id = report["stock_id"]
                 output_path = args.vault_root / f"{company}_{stock_id}_valuation.md"
                 target_hint = "未偵測到當前檔案，改建新筆記"
-        write_obsidian_note(output_path, rendered_output, args.write_mode)
+        write_obsidian_note(output_path, rendered_output, write_mode)
         print(f"{output_path}（{target_hint}，{args.write_mode}）")
         return 0
 

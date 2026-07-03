@@ -15,7 +15,8 @@
 #               省略＝寫入「Obsidian 當前開啟的檔案」（讀 .obsidian/workspace.json
 #               的 active leaf）；偵測不到才建立新筆記 <新建檔名>
 #   <寫入模式>  選填；overwrite（複寫，預設）｜ append（附加到檔尾，去重 frontmatter）
-#   <新建檔名>  選填；未偵測到當前檔且未指定路徑時的新筆記檔名，預設「台股分析報告.md」
+#               ｜ newfile（不動既有檔，改用新建檔名建立不重複的新筆記）
+#   <新建檔名>  選填；未偵測到當前檔且未指定路徑時（或 newfile 時）的新筆記檔名，預設「台股分析報告.md」
 #
 #   環境變數 VAULT_ROOT：Vault 根目錄，預設當前目錄 .
 #
@@ -47,10 +48,31 @@ usage() {
 
   <內容檔>   含完整 Markdown 報告的檔案
   [筆記路徑] 選填；省略＝寫入 Obsidian 當前開啟的檔案，偵測不到才建新筆記
-  [寫入模式] 選填；overwrite（複寫，預設）｜ append（附加到檔尾）
+  [寫入模式] 選填；overwrite（複寫，預設）｜ append（附加到檔尾）｜ newfile（建立新檔，自動改名）
   [新建檔名] 選填；建新筆記時的檔名，預設「台股分析報告.md」
 
 EOF
+}
+
+# 給定目標路徑，若已存在則在檔名尾端加「 (2)」「 (3)」…回傳不重複的新路徑
+unique_path() {
+    local base="$1" dir fname stem candidate n
+    if [[ ! -e "$base" ]]; then
+        printf '%s' "$base"
+        return
+    fi
+    dir="$(dirname "$base")"
+    fname="$(basename "$base")"
+    stem="${fname%.md}"
+    n=2
+    while :; do
+        candidate="${dir}/${stem} (${n}).md"
+        if [[ ! -e "$candidate" ]]; then
+            printf '%s' "$candidate"
+            return
+        fi
+        n=$((n + 1))
+    done
 }
 
 # 解析 Obsidian 當前開啟的檔案（.obsidian/workspace.json 的 active leaf）
@@ -113,26 +135,34 @@ main() {
         fi
     fi
 
-    # ------- 決定寫入模式（複寫 / 附加）-------
+    # ------- 決定寫入模式（複寫 / 附加 / 建立新檔）-------
     local mode="$WRITE_MODE" ans
     if [[ -z "$mode" ]]; then
         if [[ -s "$note_path" ]]; then
             if [[ -t 0 ]]; then
                 printf '\n目標檔案已有內容：%s\n' "$note_path"
-                printf '[o] 複寫（預設）  [a] 附加到檔尾  [c] 取消 > '
+                printf '[o] 複寫（預設）  [a] 附加到檔尾  [n] 建立新檔案（自動改名）  [c] 取消 > '
                 read -r ans || ans=""
                 case "$ans" in
                     a|A) mode="append" ;;
+                    n|N) mode="newfile" ;;
                     c|C) print_warn "已取消，未寫入"; exit 0 ;;
                     *)   mode="overwrite" ;;
                 esac
             else
                 mode="overwrite"
-                print_warn "目標已有內容，非互動模式預設複寫（要附加請傳第三參數 append）"
+                print_warn "目標已有內容，非互動模式預設複寫（附加請傳 append，建立新檔請傳 newfile）"
             fi
         else
             mode="overwrite"
         fi
+    fi
+
+    # newfile：不動既有檔，改用新建檔名建立不重複的新筆記
+    if [[ "$mode" == "newfile" ]]; then
+        note_path="$(unique_path "${VAULT_ROOT}/${FALLBACK_NAME}")"
+        print_info "改建立新檔案：${note_path}"
+        mode="overwrite"
     fi
 
     local note_dir; note_dir="$(dirname "$note_path")"
