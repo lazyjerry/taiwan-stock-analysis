@@ -1,187 +1,113 @@
-# HTML 儀表板模板規格
+# Markdown 報告模板規格
 
-## CSS 樣式核心
+由 Claude 手寫完整 Markdown，參考本檔的區塊結構與 Mermaid 圖表範例。金額單位一律億元（EPS 為元）。
 
-```css
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif; background: #f0f4f8; color: #2d3748; }
+## 完整報告骨架
 
-/* Header 漸層 */
-.header {
-  background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 50%, #3182ce 100%);
-  color: white; padding: 24px 32px;
-  display: flex; justify-content: space-between; align-items: center;
-}
+```markdown
+# {公司名稱}（{股票代碼}）三維財務分析報告
 
-/* Tab 切換 */
-.tabs { display: flex; background: white; border-bottom: 2px solid #e2e8f0; padding: 0 32px; }
-.tab { padding: 14px 24px; cursor: pointer; font-size: 0.95rem; font-weight: 600;
-  color: #718096; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
-.tab.active { color: #2b6cb0; border-bottom-color: #2b6cb0; }
+> 資料來源：MOPS 官方財報頁｜分析期間：{起年}–{迄年}｜金額單位：億元（NTD）｜產業類別：{產業}
 
-/* KPI Cards */
-.kpi-row { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-.kpi-card { flex: 1; min-width: 180px; background: white; border-radius: 12px;
-  padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-left: 4px solid #3182ce; }
-.kpi-card.green { border-left-color: #38a169; }
-.kpi-card.orange { border-left-color: #dd6b20; }
-.kpi-card.red { border-left-color: #e53e3e; }
-.kpi-card.purple { border-left-color: #805ad5; }
-.kpi-label { font-size: 0.78rem; color: #718096; margin-bottom: 6px; font-weight: 500; text-transform: uppercase; }
-.kpi-value { font-size: 1.7rem; font-weight: 700; color: #2d3748; }
-.kpi-change { font-size: 0.82rem; margin-top: 4px; }
-.up { color: #38a169; } .down { color: #e53e3e; } .neutral { color: #718096; }
+## 資料來源與驗證
 
-/* Charts */
-.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-.chart-card { background: white; border-radius: 12px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
-.chart-card.full { grid-column: 1 / -1; }
-.chart-title { font-size: 0.92rem; font-weight: 700; color: #4a5568; margin-bottom: 16px;
-  padding-bottom: 10px; border-bottom: 1px solid #f0f4f8; }
-.chart-container { position: relative; height: 240px; }  /* 固定高度！必要 */
+- **抓取時間**：{fetched_at}
+- **合理性檢查**：✅ 通過（或 ⚠️ 3 項警示，見下方）
+- **MOPS 原始申報**：[上市查詢]({mops_url})｜[上櫃查詢]({mops_url_otc})
+- **官方財報頁**：[綜合損益表]({income_url})｜[資產負債表]({balance_url})｜[現金流量表]({cashflow_url})
 
-/* Tables */
-.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-.data-table th { background: #2b6cb0; color: white; padding: 10px 14px; text-align: center; }
-.data-table td { padding: 9px 14px; text-align: right; border-bottom: 1px solid #e2e8f0; }
-.data-table tr:nth-child(even) td { background: #f7fafc; }
-.data-table td:first-child { text-align: left; font-weight: 500; }
-.data-table .section-header td { background: #ebf8ff; color: #2b6cb0; font-weight: 700; }
-.data-table .total-row td { background: #e6fffa; color: #276749; font-weight: 700; }
+<!-- 僅當 sanity warnings 不為空才輸出以下區塊 -->
+> ⚠️ **合理性警示**
+> - `error` **{field}**：{msg}
+> - `warn` **{field}**：{msg}
 
-/* Insight Box */
-.insight-box { background: linear-gradient(135deg, #ebf8ff, #e6fffa);
-  border: 1px solid #bee3f8; border-radius: 12px; padding: 18px 22px; margin-bottom: 20px; }
-.insight-box h3 { color: #2b6cb0; font-size: 0.9rem; margin-bottom: 10px; }
-.insight-box ul { list-style: none; }
-.insight-box ul li { font-size: 0.87rem; color: #4a5568; padding: 3px 0;
-  padding-left: 18px; position: relative; }
-.insight-box ul li::before { content: '▸'; position: absolute; left: 0; color: #3182ce; }
+## 📊 一、經營分析
+
+| 指標 | 最新值 | 變化說明 |
+|------|-------:|----------|
+| 🟢 營收 | 81,031 億 | ▲ +18.1% YoY，AI 伺服器訂單驅動 |
+| 🔵 毛利率 | 56.1% | ■ 59.6% → 54.4% → 56.1%，V 型反彈 |
+| … 共 5 項 | | |
+
+### 🔍 經營亮點
+
+- 三年營收 61,622 → 68,596 → 81,031 億，CAGR +14.6%，最新年加速 +18.1%…
+- （共 4–5 條，每條含起訖數字 + 幅度 + 原因）
+
+（Mermaid 圖表 ×4，見下方範例）
+
+**損益表明細**
+
+| 項目 | 2022 | 2023 | 2024 | 趨勢評估 |
+|------|-----:|-----:|-----:|----------|
+| 營業收入（億元） | 61,622 | 68,596 | 81,031 | 🟢▲ CAGR +14.6% |
+| … | | | | |
+
+## 💰 二、獲利分析
+（同上結構：KPI 摘要表 → 🔍 獲利亮點 → Mermaid ×4 → 獲利能力彙總表）
+
+## 🏦 三、財務健全度
+（KPI 摘要表 → 🔍 財務健全度亮點 → Mermaid ×4 → 資產負債摘要表 + 現金流量摘要表）
 ```
 
-## KPI Card HTML 結構（正確範例）
+## Mermaid 圖表範例
 
-```html
-<div class="kpi-card green">
-  <div class="kpi-label">指標名稱</div>
-  <div class="kpi-value">數值</div>
-  <div class="kpi-change up">▲ 說明文字</div>
-</div>
+`xychart-beta` 只有單一 Y 軸。金額用 `bar`，比率/趨勢用 `line`。
+
+### 金額長條圖
+
+````markdown
+```mermaid
+xychart-beta
+  title "營收（億元）"
+  x-axis [2022, 2023, 2024]
+  y-axis "億元" 0 --> 90000
+  bar [61622, 68596, 81031]
 ```
+````
 
-⚠️ **常見錯誤**：`kpi-change` 的結尾必須是 `</div>`，絕對不能是 `</td></tr>`
+### 比率折線圖
 
-## Chart.js 組合圖（雙Y軸）範例
-
-```javascript
-new Chart(document.getElementById('myChart'), {
-  type: 'bar',
-  data: {
-    labels: ['2022', '2023', '2024'],
-    datasets: [
-      { 
-        label: '數值 (億元)', 
-        data: [100, 120, 140], 
-        backgroundColor: 'rgba(49,130,206,0.15)',
-        borderColor: '#3182ce', borderWidth: 2,
-        yAxisID: 'y'   // 左軸
-      },
-      { 
-        label: '比率 (%)', 
-        data: [10, 15, 20], 
-        type: 'line',
-        borderColor: '#38a169', backgroundColor: '#38a169',
-        pointRadius: 5, tension: 0.3,
-        yAxisID: 'y2'  // 右軸
-      }
-    ]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    scales: {
-      x: { grid: { display: false } },
-      y: { grid: { color: 'rgba(0,0,0,0.05)' } },
-      y2: { 
-        position: 'right', 
-        grid: { display: false },
-        ticks: { callback: v => v + '%' }
-      }
-    }
-  }
-});
+````markdown
+```mermaid
+xychart-beta
+  title "三層利潤率（%）"
+  x-axis [2022, 2023, 2024]
+  y-axis "%" 0 --> 60
+  line [59.6, 54.4, 56.1]
+  line [12.0, 10.5, 11.8]
 ```
+````
 
-## Tab 切換 JavaScript
+### bar + line 同圖（共用 Y 軸，僅限量級相近）
 
-```javascript
-function switchTab(name) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-  document.getElementById(name).classList.add('active');
-  event.target.classList.add('active');
-}
+````markdown
+```mermaid
+xychart-beta
+  title "營業利益（億元）"
+  x-axis [2022, 2023, 2024]
+  y-axis "億元" 0 --> 15000
+  bar [10200, 9800, 12650]
+  line [10200, 9800, 12650]
 ```
+````
 
-Tab HTML：
-```html
-<div class="tab active" onclick="switchTab('ops')">📊 經營分析</div>
-<div class="tab" onclick="switchTab('profit')">💰 獲利分析</div>
-<div class="tab" onclick="switchTab('finance')">🏦 財務健全度</div>
-```
+**雙軸替代方案**：原本「金額 bar + 比率 line」的雙 Y 軸組合圖在 Mermaid 無法呈現。改為：
+1. 金額一張 `bar` 圖、比率一張 `line` 圖；或
+2. 只保留金額圖，比率併入 KPI 摘要表與趨勢評估欄。
 
-## 完整 HTML 骨架
+## 燈號與方向符號對照
 
-```html
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-  <meta charset="UTF-8">
-  <title>{公司名稱} ({股票代碼}) 三維財務分析</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
-  <style>/* 貼入上方所有 CSS */</style>
-</head>
-<body>
-  <!-- Header -->
-  <div class="header">
-    <div>
-      <h1>{公司名稱} ({股票代碼}) 財務分析儀表板</h1>
-      <div class="subtitle">資料來源：Goodinfo.tw｜分析期間：{起年} – {迄年}｜金額單位：億元 (NTD)</div>
-    </div>
-    <div class="badge">🏢 {產業類別}</div>
-  </div>
+| emoji | 方向符號 | 意義 |
+|-------|---------|------|
+| 🟢 | ▲ | 正向 / 改善 / 成長 / 創高 |
+| 🔵 | ■ | 中性 / 橫盤 / 高檔震盪 |
+| 🟠 | ▲/■ | 需關注 |
+| 🔴 | ▼ | 警示 / 惡化 / 低於警戒 |
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('ops')">📊 經營分析</div>
-    <div class="tab" onclick="switchTab('profit')">💰 獲利分析</div>
-    <div class="tab" onclick="switchTab('finance')">🏦 財務健全度</div>
-  </div>
+## 撰寫注意
 
-  <!-- Tab 1: 經營分析 -->
-  <div id="ops" class="tab-content active">
-    <!-- 5個 KPI Cards -->
-    <!-- Insight Box -->
-    <!-- 2×2 Charts Grid -->
-    <!-- 損益表 Data Table -->
-  </div>
-
-  <!-- Tab 2: 獲利分析 -->
-  <div id="profit" class="tab-content">
-    <!-- 5個 KPI Cards -->
-    <!-- Insight Box -->
-    <!-- 2×2 Charts Grid -->
-    <!-- 獲利彙總 Data Table -->
-  </div>
-
-  <!-- Tab 3: 財務健全度 -->
-  <div id="finance" class="tab-content">
-    <!-- 5個 KPI Cards -->
-    <!-- Insight Box -->
-    <!-- 2×2 Charts Grid -->
-    <!-- 左右並排：資產負債 + 現金流量 Tables -->
-  </div>
-
-  <script>/* 所有 Chart.js 初始化 + switchTab 函數 */</script>
-</body>
-</html>
-```
+- 缺值年度：表格填 `–`，Mermaid 略過該點，勿補 0
+- 表格數值欄靠右對齊（`|-----:|`），首欄項目名稱靠左
+- Mermaid `title` 含中文時整串用雙引號包住
+- 每條亮點須含「起訖數字 + 幅度 + 原因」，禁止「有所成長」「略有下降」這類無數字描述
