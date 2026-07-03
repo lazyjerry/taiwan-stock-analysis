@@ -981,7 +981,7 @@ def main() -> int:
         write_mode = args.write_mode
         if write_mode == "newfile":
             # 不動既有檔，改用預設命名建立不重複的新筆記
-            output_path = unique_path(args.vault_root / f"{company}_{stock_id}_valuation.md")
+            output_path = unique_path(args.vault_root / f"{stock_id} {company}.md")
             target_hint = "建立新檔案"
             write_mode = "overwrite"
         elif args.note_path:
@@ -993,7 +993,7 @@ def main() -> int:
                 output_path = args.vault_root / active_rel
                 target_hint = "Obsidian 當前開啟檔案"
             else:
-                output_path = args.vault_root / f"{company}_{stock_id}_valuation.md"
+                output_path = args.vault_root / f"{stock_id} {company}.md"
                 target_hint = "未偵測到當前檔案，改建新筆記"
         write_obsidian_note(output_path, rendered_output, write_mode)
         print(f"{output_path}（{target_hint}，{args.write_mode}）")
