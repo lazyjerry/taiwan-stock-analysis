@@ -99,6 +99,22 @@ MOPS 年報頁的實際資料表在回傳 HTML 的第 2 個 table。
 
 ---
 
+## 步驟一點五：產生分析 JSON（一律執行）
+
+抓完 raw 數據後，**無論後續是否寫入 Obsidian，都固定產生一份 `*_analysis.json`**（供 `tw-stock-valuation-bands` 估值 skill 讀取，也是本 skill 的結構化資料產物）：
+
+```bash
+python3 skills/tw-stock-analysis/scripts/build_analysis_json.py \
+  --raw-json 2317_goodinfo_raw_data.json
+```
+
+- 讀 `{代碼}_goodinfo_raw_data.json`，用 `build_metrics()` 算好三年衍生指標
+- 輸出 `{名稱}_{代碼}_analysis.json`（如 `雄獅_2731_analysis.json`），含 `stock_id`／`company_name`／`years`／`metrics_by_year`（每年含 EPS、毛利率、營業利益率、ROE、負債比率、現金流等），並帶入原始 `metadata`／`verification`
+- 這份 JSON 是估值 skill `--analysis-json` 的輸入來源
+- 可帶 `--output` 自訂路徑
+
+---
+
 ## 步驟二：計算衍生指標
 
 從原始數據計算以下指標：

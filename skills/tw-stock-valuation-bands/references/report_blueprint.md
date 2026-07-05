@@ -16,8 +16,8 @@
 
 改輸出檔案（非 Obsidian）：
 
-- HTML／JSON：帶 `--output-format html｜json`，配合 `--output-dir` 或 `--output-file`
-- 檔名推導：`鴻海_2317_analysis.json` -> `鴻海_2317_valuation.{md｜html｜json}`
+- JSON：帶 `--output-format json`，配合 `--output-dir` 或 `--output-file`
+- 檔名推導：`鴻海_2317_analysis.json` -> `鴻海_2317_valuation.{md｜json}`
 
 ## 報告段落
 
@@ -29,12 +29,6 @@
 4. 估值情境（1–5 分價格帶）：悲觀 / 中性 / 樂觀 三張表，每張含價格區間、對應 PER、判讀；有現價時附現價 PER 與分數
 5. 近年股價位置（若帶歷史股價 JSON）
 6. 官方／證交所查核連結：MOPS（上市/上櫃）、證交所、Yahoo、Goodinfo
-
-### HTML 報告分頁（`--output-format html`）
-
-1. 估值總覽：公司名稱、股票代號、最新年度、基準 EPS、現價、歷史股價、三情境 EPS 與中性價格帶圖表
-2. 財報整理：整理 `metrics_by_year`，用重寫過的段名，拆三張表
-3. 情境明細：悲觀 / 中性 / 樂觀，各列 `1-5 分` 區間、對應 PER、判讀
 
 代理在最終回覆中摘出中性情境區間、現價分數、偏便宜或偏貴判讀；若使用者只要摘要，不必整份貼出。
 
@@ -77,5 +71,5 @@
 - 預設寫入 Obsidian 當前開啟的檔案；**若該檔已有內容，先讓使用者三選一**（複寫 `overwrite`／附加 `append`／建立新檔 `newfile`），再傳 `--write-mode`
 - 使用者若指定筆記路徑，帶 `--note-path`，略過偵測
 - 回覆中要明講報告寫入了哪個檔案（當前開啟檔／指定路徑／新建檔）與寫入模式
-- 若改用 HTML／JSON，帶 `--output-format` 並在回覆中明講完整檔案路徑
+- 若改用 JSON，帶 `--output-format json` 並在回覆中明講完整檔案路徑
 - 若只有 `*_analysis.json` 沒有現價，照樣建立報告，只是不做現價評分

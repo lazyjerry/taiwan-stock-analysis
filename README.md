@@ -42,14 +42,14 @@ python3 skills/tw-stock-analysis/scripts/fetch_goodinfo.py <stock_id>
 
 這支腳本沿用舊檔名，但目前實際改由 MOPS 官方財報頁抓資料，會輸出 `<stock_id>_goodinfo_raw_data.json`。
 
-若要把 raw JSON 轉成三分頁 HTML 儀表板：
+接著一律把 raw JSON 轉成結構化的 `*_analysis.json`（估值 skill 的輸入）：
 
 ```bash
-python3 skills/tw-stock-analysis/scripts/build_analysis_dashboard.py \
-    --raw-json <stock_id>_goodinfo_raw_data.json \
-    --price-history-json <stock_id>_twse_price_history.json \
-    --output <company>_<stock_id>_analysis.html
+python3 skills/tw-stock-analysis/scripts/build_analysis_json.py \
+    --raw-json <stock_id>_goodinfo_raw_data.json
 ```
+
+預設輸出 `<company>_<stock_id>_analysis.json`，含 `stock_id`／`company_name`／`years`／`metrics_by_year`。
 
 ### 2. 估值計算
 
@@ -69,7 +69,7 @@ python3 skills/tw-stock-valuation-bands/scripts/build_valuation_report.py \
     --current-price 163.5
 ```
 
-預設會輸出 `<company>_<stock_id>_valuation.html`。
+預設輸出 Markdown 並寫入 Obsidian 當前開啟的筆記（`--output-format md`）；也可帶 `--output-format json` 改輸出檔案。
 
 若有歷史股價 JSON：
 
@@ -80,7 +80,7 @@ python3 skills/tw-stock-valuation-bands/scripts/build_valuation_report.py \
     --price-history-json <stock_id>_<market>_price_history.json
 ```
 
-若只提供股票代號，必須額外指定 `--analyze-script`。目前這個 repo 沒有內建預設的 `analyze_tw_stock.py`。
+若只提供股票代號，先跑 `fetch_goodinfo.py` + `build_analysis_json.py` 產出 `*_analysis.json`，再進估值。
 歷史股價抓取目前僅支援上市 `TWSE`，上櫃 `TPEx` 尚未接入官方日價 JSON。
 
 ## 專案結構
@@ -94,8 +94,9 @@ taiwan-stock-analysis/
 │   │   ├── references/
 │   │   │   └── dashboard_template.md
 │   │   └── scripts/
-│   │       ├── build_analysis_dashboard.py
-│   │       └── fetch_goodinfo.py
+│   │       ├── build_analysis_json.py
+│   │       ├── fetch_goodinfo.py
+│   │       └── write_to_obsidian.sh
 │   └── tw-stock-valuation-bands/
 │       ├── SKILL.md
 │       ├── references/

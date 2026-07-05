@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import html
 import json
 import math
 import subprocess
@@ -19,8 +18,6 @@ DEFAULT_PER_BANDS = {
     2: (10.0, 11.0),
     1: (11.0, None),
 }
-
-CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"
 
 
 @dataclass(frozen=True)
@@ -68,9 +65,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-format",
-        choices=("md", "html", "json"),
+        choices=("md", "json"),
         default="md",
-        help="Report format (預設 md：寫入 Obsidian 當前開啟的筆記)",
+        help="Report format：md（預設，寫入 Obsidian 當前開啟的筆記）｜json",
     )
     parser.add_argument(
         "--output-file",
@@ -318,7 +315,7 @@ def derive_output_path(
     if output_file is not None:
         return output_file
 
-    suffix = {"json": ".json", "md": ".md"}.get(output_format, ".html")
+    suffix = {"json": ".json", "md": ".md"}.get(output_format, ".md")
     stem = analysis_json.stem
     if stem.endswith("_analysis"):
         report_name = f"{stem[:-9]}_valuation{suffix}"
@@ -333,10 +330,6 @@ def write_report(path: Path, content: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
-
-
-def esc(value: object) -> str:
-    return html.escape(str(value), quote=True)
 
 
 def financial_row(
@@ -497,14 +490,6 @@ def make_report(
     }
 
 
-def score_class(score: int) -> str:
-    if score >= 4:
-        return "up"
-    if score == 3:
-        return "neutral"
-    return "down"
-
-
 def per_range_text(band: dict) -> str:
     low = fmt_per(band["per_low"])
     high = fmt_per(band["per_high"])
@@ -513,242 +498,6 @@ def per_range_text(band: dict) -> str:
     if band["score"] == 1:
         return f"{low} 以上"
     return f"{low}–{high}"
-
-
-def band_chart_value(band: dict) -> float | None:
-    if band["price_low"] is None:
-        return band["price_high"]
-    if band["price_high"] is None:
-        return band["price_low"]
-    return round((band["price_low"] + band["price_high"]) / 2, 2)
-
-
-def render_financial_table(title: str, years: list[str], rows: list[dict]) -> str:
-    header_cells = "".join(f"<th>{esc(year)}</th>" for year in years)
-    body_rows = []
-    for row in rows:
-        value_cells = "".join(f"<td>{esc(value)}</td>" for value in row["values"])
-        body_rows.append(
-            "<tr>"
-            f"<td>{esc(row['label'])}</td>"
-            f"{value_cells}"
-            f"<td class=\"{esc(row['trend_class'])}\">{esc(row['trend'])}</td>"
-            "</tr>"
-        )
-    return (
-        "<div class=\"table-card\">"
-        f"<div class=\"section-title\">{esc(title)}</div>"
-        "<table class=\"data-table\">"
-        f"<thead><tr><th>項目</th>{header_cells}<th>三年變化</th></tr></thead>"
-        f"<tbody>{''.join(body_rows)}</tbody>"
-        "</table></div>"
-    )
-
-
-def render_band_table(scenario: dict) -> str:
-    rows = []
-    for band in scenario["bands"]:
-        score = band["score"]
-        rows.append(
-            "<tr>"
-            f"<td><span class=\"score-pill score-{score}\">{score} 分</span></td>"
-            f"<td>{esc(band['price_range'])}</td>"
-            f"<td>{esc(per_range_text(band))}</td>"
-            f"<td>{esc(allocation_for_score(score))}</td>"
-            "</tr>"
-        )
-    current = scenario["current_price_view"]
-    current_html = ""
-    if current:
-        current_html = (
-            "<div class=\"current-note\">"
-            f"目前股價 {esc(fmt_price(current['price']))} 元，PER {esc(fmt_per(current['per']))}，"
-            f"<span class=\"{esc(score_class(current['score']))}\">{current['score']} 分</span>"
-            "</div>"
-        )
-    return (
-        "<section class=\"scenario-card\">"
-        "<div class=\"scenario-head\">"
-        f"<div><h3>{esc(scenario['label'])}情境</h3><p>EPS {scenario['eps']:.2f} 元</p></div>"
-        f"{current_html}"
-        "</div>"
-        "<table class=\"data-table valuation-table\">"
-        "<thead><tr><th>分數</th><th>價格區間</th><th>對應 PER</th><th>判讀</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody>"
-        "</table>"
-        "</section>"
-    )
-
-
-def render_html(report: dict) -> str:
-    company = report["company_name"]
-    stock_id = report["stock_id"]
-    year = report["latest_year"]
-    latest_eps = report["latest_eps"]
-    history = report.get("price_history_summary")
-    years = report["analysis_data"].get("years") or []
-    financial_groups = build_financial_groups(report["analysis_data"])
-    neutral = next(
-        (scenario for scenario in report["scenario_rows"] if scenario["label"] == "中性"),
-        report["scenario_rows"][0],
-    )
-    current = neutral["current_price_view"]
-    neutral_score = f"{current['score']} 分" if current else "未提供現價"
-    neutral_band = next((band for band in neutral["bands"] if band["score"] == 3), None)
-    neutral_range = neutral_band["price_range"] if neutral_band else "-"
-    scenario_labels = [scenario["label"] for scenario in report["scenario_rows"]]
-    scenario_eps_values = [scenario["eps"] for scenario in report["scenario_rows"]]
-    band_labels = [f"{band['score']} 分" for band in neutral["bands"]]
-    band_prices = [band_chart_value(band) for band in neutral["bands"]]
-
-    history_html = ""
-    if history:
-        history_html = (
-            "<span class=\"vl\">歷史收盤區間</span>"
-            f"<span>{esc(history['start_date'])}–{esc(history['end_date'])}｜"
-            f"{history['close_low']:.2f}–{history['close_high']:.2f} 元｜"
-            f"最近 {history['latest_close']:.2f} 元（{esc(history['latest_close_date'])}）｜"
-            f"區間位置 {history['range_position_pct']:.2f}% / 百分位 {history['percentile_pct']:.2f}%</span>"
-        )
-
-    current_card = (
-        f"<div class=\"kpi-card\"><div class=\"kpi-label\">中性現價評分</div><div class=\"kpi-value\">{esc(neutral_score)}</div><div class=\"kpi-change {esc(score_class(current['score']) if current else 'neutral')}\">"
-        f"{'PER ' + fmt_per(current['per']) if current else '未計算 PER'}</div></div>"
-    )
-    history_card = ""
-    if history:
-        history_card = (
-            "<div class=\"kpi-card\"><div class=\"kpi-label\">近年收盤位置</div>"
-            f"<div class=\"kpi-value\">{history['range_position_pct']:.1f}%</div>"
-            f"<div class=\"kpi-change neutral\">百分位 {history['percentile_pct']:.1f}%｜{esc(history['range_position_label'])}</div></div>"
-        )
-
-    financial_html = "".join(
-        render_financial_table(group["title"], years, group["rows"])
-        for group in financial_groups
-    )
-    scenarios_html = "".join(render_band_table(scenario) for scenario in report["scenario_rows"])
-
-    return f"""<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{esc(company)} ({esc(stock_id)}) 估值區間</title>
-<script src="{CHART_JS_CDN}"></script>
-<style>
-* {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{ font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif; background: #f0f4f8; color: #2d3748; }}
-.header {{ background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 50%, #3182ce 100%); color: white; padding: 24px 32px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }}
-.header h1 {{ font-size: 1.6rem; font-weight: 700; }}
-.subtitle {{ font-size: 0.92rem; opacity: 0.9; margin-top: 6px; }}
-.badge {{ background: rgba(255,255,255,0.15); padding: 8px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; white-space: nowrap; }}
-.verify-bar {{ background: #1a202c; color: #e2e8f0; padding: 8px 32px; font-size: 0.78rem; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
-.verify-bar .vl {{ color: #a0aec0; }}
-.tabs {{ display: flex; background: white; border-bottom: 2px solid #e2e8f0; padding: 0 32px; overflow-x: auto; }}
-.tab {{ appearance: none; background: transparent; border: 0; padding: 14px 24px; cursor: pointer; font-size: 0.95rem; font-weight: 600; color: #718096; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }}
-.tab.active {{ color: #2b6cb0; border-bottom-color: #2b6cb0; }}
-.tab-content {{ display: none; padding: 28px 32px; }}
-.tab-content.active {{ display: block; }}
-.kpi-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }}
-.kpi-card {{ background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-left: 4px solid #3182ce; min-width: 0; }}
-.kpi-label {{ font-size: 0.78rem; color: #718096; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; }}
-.kpi-value {{ font-size: 1.7rem; font-weight: 700; color: #2d3748; line-height: 1.1; overflow-wrap: anywhere; }}
-.kpi-change {{ font-size: 0.82rem; margin-top: 8px; }}
-.up {{ color: #2f855a; }}
-.down {{ color: #c53030; }}
-.neutral {{ color: #718096; }}
-.charts-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }}
-.chart-card, .table-card, .scenario-card {{ background: white; border-radius: 8px; padding: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 20px; }}
-.chart-title, .section-title {{ font-size: 0.92rem; font-weight: 700; color: #4a5568; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #f0f4f8; }}
-.chart-container {{ position: relative; height: 260px; }}
-.data-table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
-.data-table th {{ background: #2b6cb0; color: white; padding: 10px 14px; text-align: center; }}
-.data-table td {{ padding: 10px 14px; text-align: right; border-bottom: 1px solid #e2e8f0; }}
-.data-table td:first-child {{ text-align: left; font-weight: 600; }}
-.data-table tr:nth-child(even) td {{ background: #f7fafc; }}
-.scenario-head {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 16px; }}
-.scenario-head h3 {{ font-size: 1.05rem; color: #2d3748; }}
-.scenario-head p, .current-note {{ font-size: 0.86rem; color: #718096; margin-top: 6px; }}
-.score-pill {{ display: inline-block; min-width: 48px; padding: 3px 8px; border-radius: 999px; text-align: center; font-size: 0.76rem; font-weight: 700; }}
-.score-5, .score-4 {{ background: #c6f6d5; color: #276749; }}
-.score-3 {{ background: #e2e8f0; color: #4a5568; }}
-.score-2, .score-1 {{ background: #fed7d7; color: #9b2c2c; }}
-@media (max-width: 920px) {{
-  .kpi-row, .charts-grid {{ grid-template-columns: 1fr 1fr; }}
-}}
-@media (max-width: 640px) {{
-  .header {{ flex-direction: column; align-items: flex-start; }}
-  .tab-content {{ padding: 20px 16px; }}
-  .tabs, .verify-bar {{ padding-left: 16px; padding-right: 16px; }}
-  .kpi-row, .charts-grid {{ grid-template-columns: 1fr; }}
-  .scenario-head {{ flex-direction: column; }}
-  .data-table {{ font-size: 0.78rem; }}
-  .data-table th, .data-table td {{ padding: 8px 10px; }}
-}}
-</style>
-</head>
-<body>
-<div class="header">
-  <div>
-    <h1>{esc(company)} ({esc(stock_id)}) 估值區間儀表板</h1>
-    <div class="subtitle">最新年度：{esc(year)}｜基準 EPS：{latest_eps:.2f} 元｜資料來源：analysis JSON</div>
-  </div>
-  <div class="badge">HTML Valuation Dashboard</div>
-</div>
-<div class="verify-bar">
-  <span class="vl">中性情境</span><span>{neutral['eps']:.2f} EPS｜3 分帶 {esc(neutral_range)}</span>
-  <span class="vl">目前股價</span><span>{esc(fmt_price(report['current_price'])) if report['current_price'] is not None else '-'}</span>
-  {history_html}
-</div>
-<div class="tabs">
-  <button class="tab active" onclick="switchTab('overview', event)">估值總覽</button>
-  <button class="tab" onclick="switchTab('financials', event)">財報整理</button>
-  <button class="tab" onclick="switchTab('scenarios', event)">情境明細</button>
-</div>
-<main>
-  <section id="overview" class="tab-content active">
-    <div class="kpi-row">
-      <div class="kpi-card"><div class="kpi-label">最新年度 EPS</div><div class="kpi-value">{latest_eps:.2f} 元</div><div class="kpi-change neutral">{esc(year)} 年</div></div>
-      <div class="kpi-card"><div class="kpi-label">中性 3 分帶</div><div class="kpi-value">{esc(neutral_range)}</div><div class="kpi-change neutral">PER 9–10x</div></div>
-      {current_card}
-      {history_card}
-    </div>
-    <div class="charts-grid">
-      <div class="chart-card"><div class="chart-title">三情境 EPS</div><div class="chart-container"><canvas id="epsScenarioChart"></canvas></div></div>
-      <div class="chart-card"><div class="chart-title">中性情境價格帶</div><div class="chart-container"><canvas id="neutralBandChart"></canvas></div></div>
-    </div>
-    {render_band_table(neutral)}
-  </section>
-  <section id="financials" class="tab-content">
-    {financial_html}
-  </section>
-  <section id="scenarios" class="tab-content">
-    {scenarios_html}
-  </section>
-</main>
-<script>
-function switchTab(name, event) {{
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-  document.getElementById(name).classList.add('active');
-  event.currentTarget.classList.add('active');
-}}
-const simpleOptions = {{ responsive: true, maintainAspectRatio: false, scales: {{ x: {{ grid: {{ display: false }} }}, y: {{ grid: {{ color: 'rgba(0,0,0,0.05)' }} }} }} }};
-new Chart(document.getElementById('epsScenarioChart'), {{
-  type: 'bar',
-  data: {{ labels: {json.dumps(scenario_labels, ensure_ascii=False)}, datasets: [{{ label: 'EPS (元)', data: {json.dumps(scenario_eps_values, ensure_ascii=False)}, backgroundColor: ['rgba(229,62,62,0.45)', 'rgba(49,130,206,0.65)', 'rgba(56,161,105,0.55)'], borderColor: ['#c53030', '#2b6cb0', '#2f855a'], borderWidth: 2, borderRadius: 6 }}] }},
-  options: simpleOptions
-}});
-new Chart(document.getElementById('neutralBandChart'), {{
-  type: 'bar',
-  data: {{ labels: {json.dumps(band_labels, ensure_ascii=False)}, datasets: [{{ label: '代表價格 (元)', data: {json.dumps(band_prices, ensure_ascii=False)}, backgroundColor: ['rgba(47,133,90,0.65)', 'rgba(56,161,105,0.55)', 'rgba(113,128,150,0.45)', 'rgba(221,107,32,0.5)', 'rgba(197,48,48,0.5)'], borderRadius: 6 }}] }},
-  options: simpleOptions
-}});
-</script>
-</body>
-</html>
-"""
 
 
 def render_markdown(report: dict) -> str:
@@ -965,10 +714,8 @@ def main() -> int:
     report = make_report(data, scenarios, args.current_price, price_history)
     if args.output_format == "json":
         rendered_output = json.dumps(report, ensure_ascii=False, indent=2)
-    elif args.output_format == "md":
+    else:  # md
         rendered_output = render_markdown(report)
-    else:
-        rendered_output = render_html(report)
 
     # md 且未指定輸出檔／輸出資料夾 → 預設寫入 Obsidian 當前開啟的檔案
     if (
