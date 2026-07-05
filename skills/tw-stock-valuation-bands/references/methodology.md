@@ -47,7 +47,7 @@
 - 這套規則是簡化估值帶，不是完整 DCF
 - 對循環股特別要搭配景氣判讀
 - 若最新年度 EPS 含一次性利益，應先用自訂 EPS 覆寫
-- 歷史股價目前僅接上市 TWSE 公開日價 JSON
+- 歷史股價支援上市 TWSE 與上櫃 TPEx 公開日價 JSON（`fetch_price_history.py --market twse｜tpex`）
 - 區間位置與百分位是價格相對位置，不等於完整歷史 PER 回測
 
 ## 歷史股價補充

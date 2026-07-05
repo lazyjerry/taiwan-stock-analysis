@@ -13,6 +13,7 @@ import requests
 
 
 TWSE_STOCK_DAY_URL = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+TPEX_STOCK_DAY_URL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,13 @@ class MonthlyRequest:
 
     @property
     def query_date(self) -> str:
+        """TWSE 端點日期參數：西元 YYYYMM01。"""
         return f"{self.year:04d}{self.month:02d}01"
+
+    @property
+    def tpex_query_date(self) -> str:
+        """TPEx 端點日期參數：西元 YYYY/MM/01。"""
+        return f"{self.year:04d}/{self.month:02d}/01"
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,7 +47,7 @@ def parse_args() -> argparse.Namespace:
         "--market",
         choices=("twse", "tpex"),
         default="twse",
-        help="Market code. Only twse is currently supported.",
+        help="Market code：twse（上市，預設）｜tpex（上櫃）",
     )
     parser.add_argument(
         "--output",
@@ -73,7 +80,13 @@ def iter_recent_months(months: int) -> list[MonthlyRequest]:
     return items
 
 
-def fetch_month(stock_id: str, request_month: MonthlyRequest, session: requests.Session) -> dict:
+def fetch_month(
+    stock_id: str, request_month: MonthlyRequest, session: requests.Session, market: str
+) -> dict:
+    """回傳統一為 TWSE 形狀 `{"data": [...]}`，兩市場欄位排列相同。"""
+    if market == "tpex":
+        return fetch_month_tpex(stock_id, request_month, session)
+
     response = session.get(
         TWSE_STOCK_DAY_URL,
         params={
@@ -91,6 +104,26 @@ def fetch_month(stock_id: str, request_month: MonthlyRequest, session: requests.
             f"TWSE 回傳失敗：{request_month.query_date} {stock_id} -> {stat}"
         )
     return payload
+
+
+def fetch_month_tpex(
+    stock_id: str, request_month: MonthlyRequest, session: requests.Session
+) -> dict:
+    response = session.get(
+        TPEX_STOCK_DAY_URL,
+        params={
+            "code": stock_id,
+            "date": request_month.tpex_query_date,
+            "response": "json",
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    tables = payload.get("tables") or []
+    # TPEx 每列欄位順序與 TWSE 相同（日期/量/額/開/高/低/收/漲跌/筆數），攤平即可共用 normalize_records
+    data = tables[0].get("data", []) if tables else []
+    return {"data": data}
 
 
 def parse_number(value: str) -> float | None:
@@ -163,31 +196,37 @@ def summarize_history(records: list[dict]) -> dict:
 
 
 def build_metadata(stock_id: str, months: int, market: str) -> dict:
+    if market == "tpex":
+        source = "TPEx"
+        source_url = f"{TPEX_STOCK_DAY_URL}?code={stock_id}&date=YYYY/MM/01&response=json"
+        note = "上櫃 TPEx 日價；成交量單位為仟股（TWSE 為股），估值僅用收盤價不受影響。"
+    else:
+        source = "TWSE"
+        source_url = f"{TWSE_STOCK_DAY_URL}?response=json&date=YYYYMM01&stockNo={stock_id}"
+        note = "上市 TWSE 日價。"
     return {
         "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%S+08:00"),
-        "source": "TWSE",
+        "source": source,
         "market": market,
         "months_requested": months,
-        "source_url": f"{TWSE_STOCK_DAY_URL}?response=json&date=YYYYMM01&stockNo={stock_id}",
-        "note": "目前僅支援上市 TWSE 歷史股價；上櫃 TPEx 尚未接入官方日價 JSON。",
+        "source_url": source_url,
+        "note": note,
     }
 
 
 def fetch_history(stock_id: str, months: int, market: str) -> dict:
-    if market != "twse":
-        raise NotImplementedError("目前僅支援上市 TWSE 歷史股價；TPEx 請先自行提供資料")
-
     session = requests.Session()
+    referer = "https://www.tpex.org.tw/" if market == "tpex" else "https://www.twse.com.tw/"
     session.headers.update(
         {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            "Referer": "https://www.twse.com.tw/",
+            "Referer": referer,
         }
     )
 
     payloads = []
     for request_month in iter_recent_months(months):
-        payloads.append(fetch_month(stock_id, request_month, session))
+        payloads.append(fetch_month(stock_id, request_month, session, market))
         time.sleep(0.2)
 
     records = normalize_records(payloads)
