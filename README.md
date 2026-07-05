@@ -1,15 +1,16 @@
 # 🇹🇼 台灣股票分析 Skills
 
-這個 repo 目前包含兩個以台股為核心的 skill：
+這個 repo 目前包含三個以台股為核心的 skill：
 
-- `tw-stock-analysis`：抓取 MOPS 官方財報頁資料，整理成三維財務分析結果
-- `tw-stock-valuation-bands`：把既有分析結果轉成悲觀／中性／樂觀三種估值區間與 1–5 分評級
+- `tw-stock-analysis`：抓取 MOPS 官方財報，整理三維財務分析與結構化 JSON
+- `tw-stock-valuation-bands`：把分析 JSON 轉成估值區間、1–5 分評級與合理 PER 比較
+- `tw-stock-etf-constituent-lookup`：查詢台灣上市 ETF 的完整成分股並寫入 Obsidian
 
 ## Skills
 
 ### tw-stock-analysis
 
-用途：輸入股票代號後，抓取公開財報數據，整理經營分析、獲利分析、財務健全度。
+從 MOPS 取得最近 8 個可用年報與最新季報，整理經營分析、獲利分析、財務健全度，並提供後續估值所需的結構化資料。
 
 涵蓋面向：
 
@@ -21,91 +22,13 @@
 
 ### tw-stock-valuation-bands
 
-用途：把既有 `*_analysis.json` 轉成三種 EPS 情境的估值帶，並輸出 HTML 儀表板，內含 1–5 分價格區間、現價評分與分批建議。
-若另外提供歷史股價 JSON，還會補上近年收盤價區間與百分位。
+接續財報分析結果，依 TTM（Trailing Twelve Months，最近十二個月）EPS 或最新年報 EPS 建立悲觀／中性／樂觀估值區間、1–5 分評級與分批建議。
 
-使用前提：
+可加入歷史股價區間與百分位，並比較歷史 PER 分位數、PEG、ROE 驅動與 Graham 成長公式。預設輸出至 Obsidian，也可保留結構化 JSON。
 
-- 先和使用者確認股票代號、公司名稱、檔名是否為同一個標的
-- 確認完成才分析
-- 若只有股票代號、沒有 `*_analysis.json`，不要直接假設 repo 內有 `analyze_tw_stock.py`
+### tw-stock-etf-constituent-lookup
 
-## 資料流程
-
-### 1. 財報抓取
-
-從 repo 根目錄可執行：
-
-```bash
-python3 skills/tw-stock-analysis/scripts/fetch_goodinfo.py <stock_id>
-```
-
-這支腳本沿用舊檔名，但目前實際改由 MOPS 官方財報頁抓資料，會輸出 `<stock_id>_goodinfo_raw_data.json`。
-
-接著一律把 raw JSON 轉成結構化的 `*_analysis.json`（估值 skill 的輸入）：
-
-```bash
-python3 skills/tw-stock-analysis/scripts/build_analysis_json.py \
-    --raw-json <stock_id>_goodinfo_raw_data.json
-```
-
-預設輸出 `<company>_<stock_id>_analysis.json`，含 `stock_id`／`company_name`／`years`／`metrics_by_year`。
-
-### 2. 估值計算
-
-估值 skill 讀的是 `*_analysis.json`，不是 `*_goodinfo_raw_data.json`。
-
-若要補歷史股價，可先抓上市股票的公開日價資料：
-
-```bash
-python3 skills/tw-stock-valuation-bands/scripts/fetch_price_history.py 2330 --months 36
-```
-
-預設會輸出 `<stock_id>_<market>_price_history.json`，例如 `2330_twse_price_history.json`。
-
-```bash
-python3 skills/tw-stock-valuation-bands/scripts/build_valuation_report.py \
-    --analysis-json <company>_<stock_id>_analysis.json \
-    --current-price 163.5
-```
-
-預設輸出 Markdown 並寫入 Obsidian 當前開啟的筆記（`--output-format md`）；也可帶 `--output-format json` 改輸出檔案。
-
-若有歷史股價 JSON：
-
-```bash
-python3 skills/tw-stock-valuation-bands/scripts/build_valuation_report.py \
-    --analysis-json <company>_<stock_id>_analysis.json \
-    --current-price 163.5 \
-    --price-history-json <stock_id>_<market>_price_history.json
-```
-
-若只提供股票代號，先跑 `fetch_goodinfo.py` + `build_analysis_json.py` 產出 `*_analysis.json`，再進估值。
-歷史股價抓取目前僅支援上市 `TWSE`，上櫃 `TPEx` 尚未接入官方日價 JSON。
-
-## 專案結構
-
-```text
-taiwan-stock-analysis/
-├── README.md
-├── skills/
-│   ├── tw-stock-analysis/
-│   │   ├── SKILL.md
-│   │   ├── references/
-│   │   │   └── dashboard_template.md
-│   │   └── scripts/
-│   │       ├── build_analysis_json.py
-│   │       ├── fetch_goodinfo.py
-│   │       └── write_to_obsidian.sh
-│   └── tw-stock-valuation-bands/
-│       ├── SKILL.md
-│       ├── references/
-│       │   └── methodology.md
-│       └── scripts/
-│           ├── build_valuation_report.py
-│           └── fetch_price_history.py
-└── docs/
-```
+查詢任意台灣上市 ETF 的完整成分股，並產生標準化 Obsidian 筆記。CMoney API 為主要資料來源，MoneyDJ 提供基金名稱與備援資料。
 
 ## 使用範例
 
@@ -119,6 +42,12 @@ taiwan-stock-analysis/
 
 ```text
 幫我用 2317 的 analysis JSON 算估值區間，現價 163.5
+```
+
+ETF 成分股：
+
+```text
+幫我查 0050 的完整成分股
 ```
 
 ## 安裝 ai-global
@@ -174,7 +103,8 @@ ai-global add-skill https://github.com/lazyjerry/taiwan-stock-analysis
 
 ## 注意事項
 
-- 僅適用於台灣上市／上櫃公司（4 位數股票代碼）
-- 財報資料來源為 MOPS 官方財報頁；歷史股價資料來源為 TWSE 公開日價 API
+- 財報與估值 skill 適用於台灣上市／上櫃公司
+- ETF 成分股 skill 支援 4–8 位英數的台灣上市 ETF 代號
+- 財報資料來源為 MOPS 官方財報頁；歷史股價資料來源為 TWSE／TPEx 公開日價 API
+- ETF 成分股主來源為 CMoney API，MoneyDJ 提供基金名稱與備援資料
 - 僅供財務學習與研究參考，不構成投資建議
-- `fetch_goodinfo.py` 目前產出的是原始財報 JSON（`*_goodinfo_raw_data.json`）；估值 skill 需要的是分析後 JSON，兩者不要混用

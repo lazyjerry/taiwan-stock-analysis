@@ -131,6 +131,8 @@ def main() -> int:
         "market": raw.get("market"),
         "years": years,
         "metrics_by_year": metrics,
+        "latest_quarter": raw.get("latest_quarter"),
+        "ttm": raw.get("ttm"),
         "metadata": raw.get("metadata"),
         "verification": raw.get("verification"),
     }

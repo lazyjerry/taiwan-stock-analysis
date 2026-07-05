@@ -186,6 +186,19 @@ def latest_year_payload(data: dict) -> tuple[str, dict]:
     return year, data["metrics_by_year"][year]
 
 
+def resolve_base_eps(data: dict) -> tuple[float, str]:
+    """基準 EPS：優先 TTM（最近四季，更即時），無則退回最新年報 EPS。"""
+    ttm = data.get("ttm") or {}
+    ttm_eps = ttm.get("eps")
+    if ttm_eps not in (None, 0) and ttm_eps > 0:
+        return float(ttm_eps), f"TTM｜{ttm.get('basis', '最近四季')}"
+    year, latest = latest_year_payload(data)
+    latest_eps = latest.get("eps")
+    if latest_eps in (None, 0):
+        raise ValueError(f"{data.get('stock_id')} 最新年度 EPS 不可用")
+    return float(latest_eps), f"{year} 年報 EPS"
+
+
 def round_price(value: float | None) -> float | None:
     if value is None:
         return None
@@ -448,9 +461,9 @@ def make_report(
     year, latest = latest_year_payload(data)
     company = data.get("company_name", data.get("stock_id", ""))
     stock_id = data.get("stock_id", "")
-    latest_eps = latest.get("eps")
-    if latest_eps in (None, 0):
-        raise ValueError(f"{stock_id} 最新年度 EPS 不可用")
+    _, base_basis = resolve_base_eps(data)
+    # 報告顯示的基準 EPS 取自中性情境（即實際驅動估值帶的值），與 scenarios 一致
+    base_eps_value = next((s.eps for s in scenarios if s.label == "中性"), scenarios[0].eps)
 
     scenario_rows = []
     for scenario in scenarios:
@@ -469,7 +482,8 @@ def make_report(
         "company_name": company,
         "stock_id": stock_id,
         "latest_year": year,
-        "latest_eps": latest_eps,
+        "latest_eps": base_eps_value,
+        "base_eps_basis": base_basis,
         "analysis_data": data,
         "current_price": current_price,
         "price_history_summary": None
@@ -505,6 +519,7 @@ def render_markdown(report: dict) -> str:
     stock_id = report["stock_id"]
     year = report["latest_year"]
     latest_eps = report["latest_eps"]
+    base_basis = report.get("base_eps_basis", "最新年報")
     history = report.get("price_history_summary")
     current_price = report["current_price"]
     years = report["analysis_data"].get("years") or []
@@ -545,7 +560,7 @@ def render_markdown(report: dict) -> str:
     lines.append(f"| **股票代碼** | {stock_id} |")
     lines.append(f"| **公司名稱** | {company} |")
     lines.append(f"| **最新年度** | {year} |")
-    lines.append(f"| **基準 EPS** | {latest_eps:.2f} 元 |")
+    lines.append(f"| **基準 EPS** | {latest_eps:.2f} 元（{base_basis}） |")
     lines.append(f"| **中性 3 分帶** | {neutral_range}（PER 9–10x） |")
     lines.append(
         f"| **目前股價** | {fmt_price(current_price) + ' 元' if current_price is not None else '–'} |"
@@ -554,11 +569,11 @@ def render_markdown(report: dict) -> str:
     lines.append(f"| **更新日期** | {today} |")
     lines.append("")
 
-    # 三年財報摘要
+    # 財報摘要（年數依實際抓取而定）
     if financial_groups and years:
-        lines.append("## 三年財報摘要")
+        lines.append(f"## 近 {len(years)} 年財報摘要")
         lines.append("")
-        header = "| 項目 | " + " | ".join(str(y) for y in years) + " | 三年變化 |"
+        header = "| 項目 | " + " | ".join(str(y) for y in years) + " | 期間變化 |"
         divider = "|------|" + "------|" * len(years) + "------|"
         for group in financial_groups:
             lines.append(f"### {group['title']}")
@@ -703,14 +718,14 @@ def main() -> int:
         return 1
 
     data = load_analysis_json(analysis_json)
-    year, latest = latest_year_payload(data)
-    latest_eps = latest.get("eps")
-    if latest_eps in (None, 0):
-        print(f"錯誤：{data.get('stock_id')} {year} EPS 不可用", file=sys.stderr)
+    try:
+        base_eps_value, _ = resolve_base_eps(data)
+    except ValueError as exc:
+        print(f"錯誤：{exc}", file=sys.stderr)
         return 1
 
     price_history = load_price_history_json(args.price_history_json, data.get("stock_id"))
-    scenarios = build_scenarios(args, float(latest_eps))
+    scenarios = build_scenarios(args, base_eps_value)
     report = make_report(data, scenarios, args.current_price, price_history)
     if args.output_format == "json":
         rendered_output = json.dumps(report, ensure_ascii=False, indent=2)

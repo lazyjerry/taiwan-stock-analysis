@@ -27,7 +27,9 @@ MARKET_LABELS = {
     'sii': '上市',
     'otc': '上櫃',
 }
-MAX_LOOKBACK_YEARS = 8
+TARGET_YEARS = 8            # 目標抓取的年報年數
+MAX_LOOKBACK_YEARS = 12     # 往回搜尋的最大年數（留裕度給早年缺漏）
+QUARTER_SEASONS = ('03', '02', '01')  # 季報季別，由新到舊探測（04 為年報，另行處理）
 
 
 # ─── 抓取層 ───────────────────────────────────────────────
@@ -66,7 +68,7 @@ def parse_amount(text, raw_unit=False):
     return round(value / 100000, 2)
 
 
-def build_payload(stock_id, roc_year, market):
+def build_payload(stock_id, roc_year, market, season='04'):
     return {
         'step': '1',
         'firstin': '1',
@@ -77,15 +79,15 @@ def build_payload(stock_id, roc_year, market):
         'isnew': 'false',
         'co_id': stock_id,
         'year': str(roc_year),
-        'season': '04',
+        'season': season,
     }
 
 
-def fetch_statement_html(session, stock_id, roc_year, market, page_id):
+def fetch_statement_html(session, stock_id, roc_year, market, page_id, season='04'):
     url = f'{MOPS_HOST}/mops/web/ajax_{page_id}'
     response = session.post(
         url,
-        data=build_payload(stock_id, roc_year, market),
+        data=build_payload(stock_id, roc_year, market, season),
         headers={'Referer': f'{MOPS_HOST}/mops/web/{page_id}'},
         timeout=20,
     )
@@ -143,6 +145,8 @@ def parse_statement_table(html):
 
 
 def find_market_and_years(session, stock_id):
+    """回傳 (market, found_years, cached_html)；抓到最多 TARGET_YEARS 個年報，
+    不足時退回實際找到的年度（防呆），只要至少 1 年即可繼續。"""
     current_roc_year = date.today().year - 1911
     for market in ('sii', 'otc'):
         found_years = []
@@ -153,9 +157,13 @@ def find_market_and_years(session, stock_id):
                 continue
             found_years.append(roc_year)
             cached_html[('income_statement', roc_year)] = html
-            if len(found_years) == 3:
-                return market, found_years, cached_html
-    raise RuntimeError(f'找不到 {stock_id} 最近三個可用年度的官方財報資料')
+            if len(found_years) == TARGET_YEARS:
+                break
+        if found_years:
+            if len(found_years) < TARGET_YEARS:
+                print(f'⚠️  {stock_id} 僅取得 {len(found_years)} 個年度年報（目標 {TARGET_YEARS}），以現有資料續算')
+            return market, found_years, cached_html
+    raise RuntimeError(f'找不到 {stock_id} 任何可用年度的官方財報資料')
 
 
 def build_year_dict(statement_by_year):
@@ -164,6 +172,59 @@ def build_year_dict(statement_by_year):
         for field_name, value in fields.items():
             merged.setdefault(field_name, {})[year] = value
     return merged
+
+
+def extract_eps(table):
+    """從已解析的綜損表 dict 取基本每股盈餘（元，累計期間）。"""
+    if not table:
+        return None
+    key = next((k for k in table if '基本每股盈餘' in k or ('每股' in k and '盈餘' in k)), None)
+    return table.get(key) if key else None
+
+
+def build_ttm(fy_prev_eps, cum_curr, cum_prev, fy_prev_year, quarter_year, season):
+    """TTM EPS = 去年年報 EPS + 今年累計 − 去年同期累計（MOPS EPS 為累計值）。"""
+    q = int(season)
+    basis = f'FY{fy_prev_year} 年報 EPS + {quarter_year}Q{q}累計 − {fy_prev_year}Q{q}累計'
+    components = {'fy_prev_eps': fy_prev_eps, 'cum_curr_eps': cum_curr, 'cum_prev_eps': cum_prev}
+    if None in (fy_prev_eps, cum_curr, cum_prev):
+        return {
+            'eps': None,
+            'basis': basis + '（缺季報或去年同期資料，無法計算，估值退回年報 EPS）',
+            'components': components,
+        }
+    return {'eps': round(fy_prev_eps + cum_curr - cum_prev, 2), 'basis': basis, 'components': components}
+
+
+def find_latest_quarter(session, stock_id, market, latest_annual_gregorian, annual_eps):
+    """抓「今年」ROC 年度最新可用季報累計並算 TTM EPS。
+    - 只探測今年（date.today）ROC 年度的季別，年報固定為去年 → 年份天然不重疊
+    - quarter_year > latest_annual_year 守門，避免年報與同年季報重複
+    - 今年尚無任何季報 → 回傳 (None, None)，估值退回年報 EPS（防呆）
+    """
+    current_roc = date.today().year - 1911
+    income_page = STATEMENT_PAGE_MAP['income_statement']
+    for season in QUARTER_SEASONS:
+        html = fetch_statement_html(session, stock_id, current_roc, market, income_page, season=season)
+        time.sleep(0.2)
+        if html is None:
+            continue
+        quarter_gyear = current_roc + 1911
+        if quarter_gyear <= int(latest_annual_gregorian):
+            return None, None  # 與最新年報同年或更舊，資訊重複，不採用
+        cum_curr = extract_eps(parse_statement_table(html))
+        prev_html = fetch_statement_html(session, stock_id, current_roc - 1, market, income_page, season=season)
+        time.sleep(0.2)
+        cum_prev = extract_eps(parse_statement_table(prev_html)) if prev_html else None
+        quarter = {
+            'gregorian_year': str(quarter_gyear),
+            'season': season,
+            'period_label': f'{quarter_gyear} Q{int(season)} 累計',
+            'cum_eps': cum_curr,
+        }
+        ttm = build_ttm(annual_eps, cum_curr, cum_prev, latest_annual_gregorian, quarter_gyear, season)
+        return quarter, ttm
+    return None, None
 
 
 # ─── 驗證層 A：資料來源標注 ────────────────────────────────
@@ -255,7 +316,7 @@ def fetch_all(stock_id, verify_ssl=True):
     first_html = cached_html[('income_statement', roc_years[0])]
     company_name = parse_company_name(first_html)
 
-    print(f'已鎖定 {stock_id} 為 {MARKET_LABELS.get(market, market)}公司，最近三年：{", ".join(gregorian_years)}')
+    print(f'已鎖定 {stock_id} 為 {MARKET_LABELS.get(market, market)}公司，可用年度（{len(gregorian_years)}）：{", ".join(gregorian_years)}')
 
     raw_by_statement = {
         'income_statement': {},
@@ -282,6 +343,18 @@ def fetch_all(stock_id, verify_ssl=True):
     result['balance_sheet'] = build_year_dict(raw_by_statement['balance_sheet'])
     result['cash_flow'] = build_year_dict(raw_by_statement['cash_flow'])
     result['years'] = gregorian_years
+
+    # 即時性：今年最新季報 + TTM EPS（拿不到則為 None，估值退回年報 EPS）
+    latest_annual_gy = gregorian_years[0]
+    latest_annual_eps = extract_eps(raw_by_statement['income_statement'][latest_annual_gy])
+    quarter, ttm = find_latest_quarter(session, stock_id, market, latest_annual_gy, latest_annual_eps)
+    result['latest_quarter'] = quarter
+    result['ttm'] = ttm
+    if quarter and ttm:
+        eps_text = ttm['eps'] if ttm['eps'] is not None else '無法計算'
+        print(f'已補 {quarter["period_label"]}（累計 EPS {quarter["cum_eps"]}），TTM EPS={eps_text}')
+    else:
+        print('今年尚無季報，估值以最新年報 EPS 為準')
 
     # 驗證層 A：資料標注
     result['metadata'] = build_metadata(stock_id, company_name, gregorian_years, market)

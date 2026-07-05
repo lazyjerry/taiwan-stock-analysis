@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import time
 from dataclasses import dataclass
 from datetime import date
@@ -40,8 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--months",
         type=int,
-        default=36,
-        help="How many recent months to fetch, default 36",
+        default=120,
+        help="How many recent months to fetch, default 120（約 10 年；上市早期或新股缺月會自動略過）",
     )
     parser.add_argument(
         "--market",
@@ -100,9 +101,9 @@ def fetch_month(
     payload = response.json()
     stat = payload.get("stat")
     if stat and stat != "OK":
-        raise RuntimeError(
-            f"TWSE 回傳失敗：{request_month.query_date} {stock_id} -> {stat}"
-        )
+        # 拉長區間時，上市前或無交易的月份會回非 OK，視為該月無資料略過，不中斷整體抓取
+        print(f"略過 {request_month.query_date} {stock_id}：{stat}", file=sys.stderr)
+        return {"data": []}
     return payload
 
 

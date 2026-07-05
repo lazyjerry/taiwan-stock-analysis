@@ -75,11 +75,21 @@ def eps_by_year(data: dict) -> dict[int, float]:
 
 
 def base_eps(data: dict) -> float:
+    eps, _ = resolve_base_eps(data)
+    return eps
+
+
+def resolve_base_eps(data: dict) -> tuple[float, str]:
+    """基準 EPS：優先用 TTM（最近四季，更即時），無則退回最新年報 EPS。"""
+    ttm = data.get("ttm") or {}
+    ttm_eps = ttm.get("eps")
+    if ttm_eps is not None and ttm_eps > 0:
+        return float(ttm_eps), f"TTM｜{ttm.get('basis', '最近四季')}"
     years = [int(y) for y in (data.get("years") or [])]
     eps_map = eps_by_year(data)
     for year in sorted(years, reverse=True):
         if year in eps_map and eps_map[year]:
-            return eps_map[year]
+            return eps_map[year], f"{year} 年報 EPS"
     raise ValueError("找不到可用的最新年度 EPS")
 
 
@@ -349,7 +359,7 @@ def applicability(data: dict, roe: float | None, growth: float | None, has_histo
 def build_result(args: argparse.Namespace) -> dict:
     data = load_analysis(args.analysis_json)
     eps_map = eps_by_year(data)
-    base = base_eps(data)
+    base, base_basis = resolve_base_eps(data)
     roe = args.roe if args.roe is not None else latest_roe_fraction(data)
     growth = args.growth if args.growth is not None else eps_cagr(eps_map)
     has_history = args.price_history_json is not None and args.price_history_json.exists()
@@ -368,6 +378,7 @@ def build_result(args: argparse.Namespace) -> dict:
         "company_name": data.get("company_name", ""),
         "latest_year": (data.get("years") or [None])[-1],
         "base_eps": r2(base),
+        "base_eps_basis": base_basis,
         "roe_pct": None if roe is None else round(roe * 100, 2),
         "eps_growth_pct": None if growth is None else round(growth * 100, 2),
         "current_price": args.current_price,
@@ -384,7 +395,7 @@ def render_md(result: dict) -> str:
     lines.append(f"# {result['company_name']}（{result['stock_id']}）四方法合理 PER")
     lines.append("")
     lines.append(
-        f"基準 EPS {result['base_eps']} 元 ｜ ROE {result['roe_pct']}% ｜ "
+        f"基準 EPS {result['base_eps']} 元（{result.get('base_eps_basis', '最新年報')}）｜ ROE {result['roe_pct']}% ｜ "
         f"EPS 成長率 {result['eps_growth_pct']}%"
         + (f" ｜ 現價 {result['current_price']} 元（市場 PER {result['current_market_per']}x）" if result["current_price"] else "")
     )

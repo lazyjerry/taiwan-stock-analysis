@@ -44,7 +44,7 @@ https://mopsov.twse.com.tw/mops/web/ajax_t164sb05
 
 - `co_id=<stock_id>`
 - `year=<民國年>`，例如 `113` 代表 `2024`
-- `season=04`，代表年度財報
+- `season=04`，代表年度財報；另探測今年 `season=03/02/01` 抓最新季報累計，算 TTM EPS（輸出 `latest_quarter`／`ttm`）
 - `TYPEK=sii|otc`
 - `isnew=false`
 
@@ -108,7 +108,7 @@ python3 skills/tw-stock-analysis/scripts/build_analysis_json.py \
   --raw-json 2317_goodinfo_raw_data.json
 ```
 
-- 讀 `{代碼}_goodinfo_raw_data.json`，用 `build_metrics()` 算好三年衍生指標
+- 讀 `{代碼}_goodinfo_raw_data.json`，用 `build_metrics()` 算好各年度衍生指標（預設抓最近 8 年）
 - 輸出 `{名稱}_{代碼}_analysis.json`（如 `雄獅_2731_analysis.json`），含 `stock_id`／`company_name`／`years`／`metrics_by_year`（每年含 EPS、毛利率、營業利益率、ROE、負債比率、現金流等），並帶入原始 `metadata`／`verification`
 - 這份 JSON 是估值 skill `--analysis-json` 的輸入來源
 - 可帶 `--output` 自訂路徑
@@ -429,6 +429,6 @@ xychart-beta
 - MOPS 查詢年度使用民國年，例如 `113` 代表 `2024` 年度財報
 - 若某年度數據缺失（顯示為 `-` 或空白），表格填 `–`、Mermaid 圖表直接略過該點，皆不要填入 0
 - 金額單位統一為**億元**；MOPS 原始單位為**新台幣仟元**，需自行換算
-- 分析期間預設為**最近三年**，但可依用戶需求調整
+- 財報抓取預設為**最近 8 年年報 + 今年最新季報（TTM）**；早年或新股缺漏會自動略過，敘事仍可聚焦最近三年
 - 此 skill 僅適用於**台灣上市/上櫃公司**（4位數股票代碼）
 - 欄位名稱因公司不同略有差異，抓取時需以關鍵字模糊比對而非完全匹配
