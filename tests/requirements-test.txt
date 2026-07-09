@@ -1,0 +1,7 @@
+# 測試依賴（由 run_tests.sh 安裝進 tests/.venv）
+pytest>=7.0
+PyYAML>=6.0
+# 產品腳本 import 期需要（fetch_goodinfo 用 requests/bs4；fetch_price_history 用 requests）
+requests>=2.25
+beautifulsoup4>=4.9
+urllib3>=1.26

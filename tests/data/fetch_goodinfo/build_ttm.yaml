@@ -1,0 +1,14 @@
+# build_ttm(fy_prev_eps, cum_curr, cum_prev, fy_prev_year, quarter_year, season)
+# 業務邏輯：TTM EPS = 去年年報 EPS + 今年累計 − 去年同期累計；任一為 None → eps None 並附退回說明
+- id: normal              # 10 + 8 − 6 = 12
+  args: [10, 8, 6, 2024, 2025, "02"]
+  expected:
+    eps: 12
+    basis: "FY2024 年報 EPS + 2025Q2累計 − 2024Q2累計"
+    components: {fy_prev_eps: 10, cum_curr_eps: 8, cum_prev_eps: 6}
+- id: missing-cum-curr    # 缺今年累計 → 無法計算，退回年報 EPS
+  args: [10, ~, 6, 2024, 2025, "02"]
+  expected:
+    eps: ~
+    basis: "FY2024 年報 EPS + 2025Q2累計 − 2024Q2累計（缺季報或去年同期資料，無法計算，估值退回年報 EPS）"
+    components: {fy_prev_eps: 10, cum_curr_eps: ~, cum_prev_eps: 6}

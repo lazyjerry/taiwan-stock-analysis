@@ -1,0 +1,35 @@
+# parse_amount(text, raw_unit=False)：MOPS 金額字串 → 數值
+# 業務邏輯：去逗號空白；空值(''/--/—/-)→None；括號→負；預設 /100000 換算億元並 round2；
+#           raw_unit=True 時不換算（用於 EPS，僅 round2）
+- id: comma-scaled         # 1,000,000 元 → 10 億元
+  args: ["1,000,000"]
+  expected: 10.0
+- id: parentheses-negative # 括號代表負值
+  args: ["(500000)"]
+  expected: -5.0
+- id: whitespace           # 去除前後與內部空白
+  args: [" 200000 "]
+  expected: 2.0
+- id: dash-double          # -- → 缺值
+  args: ["--"]
+  expected: ~
+- id: dash-em              # 全形破折 — → 缺值
+  args: ["—"]
+  expected: ~
+- id: dash-single          # 單一 - → 缺值
+  args: ["-"]
+  expected: ~
+- id: empty                # 空字串 → 缺值
+  args: [""]
+  expected: ~
+- id: non-numeric          # 無法解析 → None
+  args: ["abc"]
+  expected: ~
+- id: raw-unit-eps         # EPS 不換算，僅 round2
+  args: ["12.34"]
+  kwargs: {raw_unit: true}
+  expected: 12.34
+- id: raw-unit-negative    # EPS 括號負值不換算
+  args: ["(1.5)"]
+  kwargs: {raw_unit: true}
+  expected: -1.5

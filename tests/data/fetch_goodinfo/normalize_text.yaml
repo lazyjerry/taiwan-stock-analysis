@@ -1,0 +1,10 @@
+# normalize_text(text)：\xa0（不斷行空白）轉一般空白並壓縮連續空白
+- id: nbsp                 # \xA0 → 空白
+  args: ["台積\xA0電"]
+  expected: "台積 電"
+- id: collapse-whitespace  # 多重空白/tab 壓成單一空白
+  args: ["a   b\t c"]
+  expected: "a b c"
+- id: strip-edges          # 去除頭尾空白
+  args: ["  hello  "]
+  expected: "hello"

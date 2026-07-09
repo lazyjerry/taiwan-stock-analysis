@@ -1,0 +1,25 @@
+# applicability(data, roe, growth, has_history)：四方法星等與唯一建議
+# 業務邏輯：high_roe = roe*100>=20；star 依 ROE/成長/歷史；recommended 取 (stars, -priority) 最大
+#           priority：historical0 > roe1 > graham2 > peg3（同分時序號小者勝）
+# 只檢查 id/stars/recommended（reason 為長字串，用 assert_subset）
+- id: high-roe-with-history   # roe25%、g10%、有歷史 → historical 5 星勝出
+  args: [{}, 0.25, 0.10, true]
+  expected:
+    - {id: historical, stars: 5, recommended: true}
+    - {id: peg, stars: 2, recommended: false}
+    - {id: roe, stars: 5, recommended: false}
+    - {id: graham, stars: 4, recommended: false}
+- id: low-roe-no-history      # roe12%、g8%、無歷史 → graham 與 peg 同 4 星，graham 序號較前勝
+  args: [{}, 0.12, 0.08, false]
+  expected:
+    - {id: historical, stars: 2, recommended: false}
+    - {id: peg, stars: 4, recommended: false}
+    - {id: roe, stars: 3, recommended: false}
+    - {id: graham, stars: 4, recommended: true}
+- id: high-roe-no-growth      # 無正成長 → roe 5 星勝出
+  args: [{}, 0.25, 0, false]
+  expected:
+    - {id: historical, stars: 2, recommended: false}
+    - {id: peg, stars: 1, recommended: false}
+    - {id: roe, stars: 5, recommended: true}
+    - {id: graham, stars: 2, recommended: false}

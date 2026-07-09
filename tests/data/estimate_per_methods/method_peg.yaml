@@ -1,0 +1,19 @@
+# method_peg(eps_map, base, growth, current_price)：PEG 法（合理 PER = 成長率%）
+# 只檢查關注鍵（回傳含長 note，用 assert_subset）
+- id: available-bands     # g=20% → 合理 PER 20，保守/積極 ±20%
+  args: [{}, 10, 0.20, ~]
+  expected:
+    available: true
+    growth_pct: 20.0
+    bands:
+      conservative: {per: 16.0, price: 160.0}
+      neutral: {per: 20.0, price: 200.0}
+      aggressive: {per: 24.0, price: 240.0}
+- id: current-underpriced # 現價90/EPS10=PER9，PEG=9/10=0.9 → 低估
+  args: [{}, 10, 0.10, 90]
+  expected:
+    current: {per: 9.0, peg: 0.9, diagnosis: "低估"}
+- id: no-growth           # 缺成長率 → 不可用
+  args: [{}, 10, ~, ~]
+  expected:
+    available: false

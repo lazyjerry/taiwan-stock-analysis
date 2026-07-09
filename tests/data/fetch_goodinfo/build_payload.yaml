@@ -1,0 +1,21 @@
+# build_payload(stock_id, roc_year, market, season='04')：組 MOPS POST 表單
+- id: default-season      # 預設季別 04（年報）
+  args: ["2330", 113, "sii"]
+  expected:
+    step: "1"
+    firstin: "1"
+    off: "1"
+    queryName: "co_id"
+    inpuType: "co_id"
+    TYPEK: "sii"
+    isnew: "false"
+    co_id: "2330"
+    year: "113"
+    season: "04"
+- id: custom-season       # 指定季別 02（Q2）
+  args: ["2330", 113, "otc", "02"]
+  expected:
+    TYPEK: "otc"
+    year: "113"
+    season: "02"
+    co_id: "2330"

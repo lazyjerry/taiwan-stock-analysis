@@ -1,0 +1,16 @@
+# percentile(values, q)：線性插值分位數（與 numpy 預設一致）
+- id: empty
+  args: [[], 50]
+  expected: ~
+- id: single
+  args: [[5], 50]
+  expected: 5
+- id: median-odd          # 排序後中位
+  args: [[3, 1, 2], 50]
+  expected: 2
+- id: q25-interpolate     # rank=0.75 → 1+(2-1)*0.75
+  args: [[1, 2, 3, 4], 25]
+  expected: 1.75
+- id: q75-interpolate     # rank=2.25 → 3+(4-3)*0.25
+  args: [[1, 2, 3, 4], 75]
+  expected: 3.25

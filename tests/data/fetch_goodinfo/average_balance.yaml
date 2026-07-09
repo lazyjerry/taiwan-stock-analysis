@@ -1,0 +1,11 @@
+# average_balance(current, previous)：資產/權益平均餘額
+# 業務邏輯：current None→None；previous None→current；否則 (current+previous)/2
+- id: both-present
+  args: [100, 200]
+  expected: 150.0
+- id: current-none
+  args: [~, 200]
+  expected: ~
+- id: previous-none-fallback  # 首年無前期 → 退回當期
+  args: [100, ~]
+  expected: 100

@@ -47,3 +47,8 @@ $RECYCLE.BIN/
 # NFS temporary files
 .nfs*
 __pycache__
+
+### Python 測試
+tests/.venv/
+.pytest_cache/
+*.pyc

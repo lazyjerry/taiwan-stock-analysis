@@ -1,0 +1,13 @@
+# validate_stock_id(stock_id)：需為 4 位數字，否則 ValueError
+- id: valid
+  args: ["2330"]
+  expected: "2330"
+- id: too-short
+  args: ["233"]
+  raises: ValueError
+- id: too-long
+  args: ["23300"]
+  raises: ValueError
+- id: contains-alpha
+  args: ["23A0"]
+  raises: ValueError

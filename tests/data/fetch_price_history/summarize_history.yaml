@@ -1,0 +1,22 @@
+# summarize_history(records)：由收盤價序列算區間位置與百分位
+# 業務邏輯：close_low/high、latest=最後一筆有收盤、range_position=(latest-low)/(high-low)*100、
+#           percentile=收盤<=latest 的比例；無任何收盤 → ValueError
+- id: basic
+  args:
+    - - {date: "2024-01-01", close: 100}
+      - {date: "2024-01-02", close: 200}
+      - {date: "2024-01-03", close: 150}
+  expected:
+    start_date: "2024-01-01"
+    end_date: "2024-01-03"
+    trading_days: 3
+    close_low: 100
+    close_high: 200
+    latest_close: 150
+    latest_close_date: "2024-01-03"
+    range_position_pct: 50.0        # (150-100)/(200-100)*100
+    percentile_pct: 66.67           # {100,150}<=150 → 2/3
+- id: no-close-raises             # 全無收盤 → ValueError
+  args:
+    - - {date: "2024-01-01"}
+  raises: ValueError

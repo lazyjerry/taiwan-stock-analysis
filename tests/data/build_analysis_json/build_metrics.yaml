@@ -1,0 +1,58 @@
+# build_metrics(raw) 逐年指標抽點驗證（輸入 fixtures/raw_sample.json，數值刻意取整數便於人工核算）
+# 每案例：year 年度、field 指標、expected 期望值。人工核算見 tests/fixtures/raw_sample.json 註解。
+- id: 2024-gross-margin      # 毛利 360 / 營收 1200 * 100
+  year: "2024"
+  field: gross_margin
+  expected: 30.0
+- id: 2024-total-opex        # 推銷24+管理36+研發60
+  year: "2024"
+  field: total_opex
+  expected: 120
+- id: 2024-total-opex-ratio  # 120 / 1200 * 100
+  year: "2024"
+  field: total_opex_ratio
+  expected: 10.0
+- id: 2024-op-margin         # 營益 240 / 1200 * 100
+  year: "2024"
+  field: op_margin
+  expected: 20.0
+- id: 2024-net-margin        # 淨利 180 / 1200 * 100
+  year: "2024"
+  field: net_margin
+  expected: 15.0
+- id: 2024-current-ratio     # 流動資產900 / 流動負債450 * 100
+  year: "2024"
+  field: current_ratio
+  expected: 200.0
+- id: 2024-debt-ratio        # 負債600 / 資產1200 * 100
+  year: "2024"
+  field: debt_ratio
+  expected: 50.0
+- id: 2024-roe               # 淨利180 / 平均權益((600+500)/2=550) * 100
+  year: "2024"
+  field: roe
+  expected: 32.72727272727273
+- id: 2024-roa               # 淨利180 / 平均資產((1200+1000)/2=1100) * 100
+  year: "2024"
+  field: roa
+  expected: 16.363636363636363
+- id: 2024-fcf               # 營運現金流300 + 資本支出(-100)
+  year: "2024"
+  field: fcf
+  expected: 200
+- id: 2024-cfo-to-net        # 營運現金流300 / 淨利180（倍數）
+  year: "2024"
+  field: cfo_to_net
+  expected: 1.6666666666666667
+- id: 2023-roe-no-prev       # 首年無前期 → 平均權益退回當期權益500，180→150/500*100
+  year: "2023"
+  field: roe
+  expected: 30.0
+- id: 2023-fcf               # 250 + (-80)
+  year: "2023"
+  field: fcf
+  expected: 170
+- id: 2023-sell-ratio        # 推銷20 / 營收1000 * 100
+  year: "2023"
+  field: sell_ratio
+  expected: 2.0

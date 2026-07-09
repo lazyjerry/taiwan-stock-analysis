@@ -1,0 +1,22 @@
+# method_graham(base, growth, bond_yield)：合理 PER = (8.5 + 2g) × factor，g±3 三情境
+# factor = 4.4/公債殖利率（有帶）否則 1.0；g 取 round(growth*100)
+- id: no-yield            # base=10、g=10、無殖利率 → factor 1
+  args: [10, 0.10, ~]
+  expected:
+    available: true
+    bands:
+      conservative: {per: 22.5, price: 225.0}   # g=7 → 8.5+14
+      neutral: {per: 28.5, price: 285.0}         # g=10 → 8.5+20
+      aggressive: {per: 34.5, price: 345.0}      # g=13 → 8.5+26
+- id: with-yield          # 殖利率 2% → factor=4.4/2=2.2
+  args: [10, 0.10, 2.0]
+  expected:
+    available: true
+    bands:
+      conservative: {per: 49.5, price: 495.0}    # 22.5*2.2
+      neutral: {per: 62.7, price: 627.0}         # 28.5*2.2
+      aggressive: {per: 75.9, price: 759.0}      # 34.5*2.2
+- id: no-growth           # 缺成長率 → 不可用
+  args: [10, ~, ~]
+  expected:
+    available: false

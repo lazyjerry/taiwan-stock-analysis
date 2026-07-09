@@ -1,0 +1,22 @@
+# find_key(section, patterns)：兩階段欄位比對
+# 業務邏輯：先跑「完全相等」（依 patterns 順序），全不中再跑「子字串包含」
+- id: exact-priority       # 完全相等優先，且依 patterns 順序取第一個命中
+  args:
+    - {"營業收入": 1, "營業收入合計": 2}
+    - ["營業收入合計", "營業收入"]
+  expected: "營業收入合計"
+- id: exact-beats-substring  # 完全相等勝過子字串
+  args:
+    - {"營業收入淨額": 1, "營業收入": 2}
+    - ["營業收入"]
+  expected: "營業收入"
+- id: substring-fallback   # 無完全相等 → 退回子字串包含
+  args:
+    - {"基本每股盈餘（元）": 5}
+    - ["每股盈餘"]
+  expected: "基本每股盈餘（元）"
+- id: no-match             # 皆不中 → None
+  args:
+    - {"資產總額": 1}
+    - ["不存在欄位"]
+  expected: ~

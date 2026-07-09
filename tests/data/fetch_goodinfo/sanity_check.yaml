@@ -1,0 +1,44 @@
+# sanity_check(metrics_by_year, years)：財務指標合理性檢查 → warnings 列表
+# 業務邏輯門檻：毛利率>100 或<-50 為 error；流動比率<0 error；負債比率>100 warn；
+#               ROE>100 warn；相鄰年度淨利率波動絕對值>30pp warn
+- id: clean               # 全部落在合理範圍 → 無警示
+  args:
+    - {"2024": {gross_margin: 30, current_ratio: 150, debt_ratio: 40, roe: 20, net_margin: 10}}
+    - ["2024"]
+  expected: []
+- id: gross-over-100      # 毛利率 > 100% → error
+  args:
+    - {"2024": {gross_margin: 120}}
+    - ["2024"]
+  expected:
+    - {level: error, field: "2024 毛利率", msg: "120.0% 超過 100%，數據可能有誤"}
+- id: gross-below-neg50   # 毛利率 < -50% → error
+  args:
+    - {"2024": {gross_margin: -60}}
+    - ["2024"]
+  expected:
+    - {level: error, field: "2024 毛利率", msg: "-60.0% 低於 -50%，請確認是否為特殊損失年度"}
+- id: current-negative    # 流動比率為負 → error
+  args:
+    - {"2024": {current_ratio: -5}}
+    - ["2024"]
+  expected:
+    - {level: error, field: "2024 流動比率", msg: "-5.0% 為負值，請檢查資產負債表數據"}
+- id: debt-over-100       # 負債比率 > 100% → warn
+  args:
+    - {"2024": {debt_ratio: 120}}
+    - ["2024"]
+  expected:
+    - {level: warn, field: "2024 負債比率", msg: "120.0% 超過 100%，若非金融業則為警示訊號"}
+- id: roe-over-100        # ROE > 100% → warn
+  args:
+    - {"2024": {roe: 150}}
+    - ["2024"]
+  expected:
+    - {level: warn, field: "2024 ROE", msg: "150.0% 超過 100%，可能為高槓桿，請確認股東權益是否偏低"}
+- id: net-margin-swing    # 相鄰年度淨利率波動 +40pp → warn
+  args:
+    - {"2023": {net_margin: 10}, "2024": {net_margin: 50}}
+    - ["2023", "2024"]
+  expected:
+    - {level: warn, field: "2023→2024 淨利率", msg: "波動 +40.0 個百分點，建議確認是否有一次性損益"}

@@ -1,0 +1,10 @@
+# build_year_dict(statement_by_year)：{年:{欄位:值}} 轉置為 {欄位:{年:值}}
+- id: pivot-two-years
+  args:
+    - {"2023": {"營收": 100, "EPS": 5}, "2024": {"營收": 120, "EPS": 6}}
+  expected:
+    "營收": {"2023": 100, "2024": 120}
+    "EPS": {"2023": 5, "2024": 6}
+- id: empty
+  args: [{}]
+  expected: {}

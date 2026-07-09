@@ -1,0 +1,10 @@
+# to_iso_date(roc_date)：民國 YYY/MM/DD → 西元 YYYY-MM-DD（年 +1911）
+- id: basic
+  args: ["113/07/05"]
+  expected: "2024-07-05"
+- id: pad-single-digit     # 月日補零
+  args: ["99/1/2"]
+  expected: "2010-01-02"
+- id: year-end
+  args: ["113/12/31"]
+  expected: "2024-12-31"

@@ -1,0 +1,28 @@
+# method_roe(roe, base)：ROE 驅動法 P/B=(ROE-g)/(r-g)，PER=P/B/ROE，三情境
+# 固定情境：conservative(r0.13,g0.07)、neutral(r0.11,g0.08)、aggressive(r0.105,g0.08)
+- id: available           # roe=0.25、base=10
+  args: [0.25, 10]
+  expected:
+    available: true
+    roe_pct: 25.0
+    bands:
+      conservative: {per: 12.0, price: 120.0}   # pb=0.18/0.06=3 → per=3/0.25=12
+      neutral: {per: 22.67, price: 226.67}       # pb=0.17/0.03≈5.667 → per≈22.67
+      aggressive: {per: 27.2, price: 272.0}      # pb=0.17/0.025=6.8 → per=6.8/0.25=27.2
+- id: no-solution         # roe=0.05 <= g → 各情境無解
+  args: [0.05, 10]
+  expected:
+    available: true
+    roe_pct: 5.0
+    bands:
+      conservative: {per: ~}
+      neutral: {per: ~}
+      aggressive: {per: ~}
+- id: missing-roe         # 缺 ROE → 不可用
+  args: [~, 10]
+  expected:
+    available: false
+- id: zero-roe            # ROE=0 → 不可用
+  args: [0, 10]
+  expected:
+    available: false

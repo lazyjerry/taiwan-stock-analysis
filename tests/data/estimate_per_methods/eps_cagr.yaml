@@ -1,0 +1,14 @@
+# eps_cagr(eps_map)：由 EPS 序列算年均複合成長率
+# 業務邏輯：只取正值；<2 筆或年跨度<=0 → None；(last/first)^(1/span)-1
+- id: growth              # 2020:10 → 2024:20，span=4，2^0.25-1
+  args:
+    - {2020: 10, 2024: 20}
+  expected: 0.18920711500272103
+- id: negatives-filtered  # 負值剔除後 2022:10→2024:20，span=2，2^0.5-1
+  args:
+    - {2020: -5, 2022: 10, 2024: 20}
+  expected: 0.41421356237309515
+- id: insufficient        # 僅 1 筆正值 → None
+  args:
+    - {2024: 10}
+  expected: ~

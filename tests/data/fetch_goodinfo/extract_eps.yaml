@@ -1,0 +1,14 @@
+# extract_eps(table)：從綜損表 dict 取基本每股盈餘
+# 業務邏輯：找含「基本每股盈餘」或同時含「每股」+「盈餘」的鍵，回其值；找不到或空表 → None
+- id: basic
+  args: [{"基本每股盈餘（元）": 5.5}]
+  expected: 5.5
+- id: alt-keyword          # 「每股」「盈餘」兩詞皆含即可
+  args: [{"每股盈餘": 4.0}]
+  expected: 4.0
+- id: empty-table
+  args: [{}]
+  expected: ~
+- id: no-eps-key
+  args: [{"營業收入": 100}]
+  expected: ~

@@ -1,0 +1,19 @@
+# get_value(section, patterns, year)：先 find_key 找欄位，再取該年度值
+- id: found               # 命中欄位且該年度有值
+  args:
+    - {"營業收入合計": {"2024": 100}}
+    - ["營業收入合計"]
+    - "2024"
+  expected: 100
+- id: key-missing         # 找不到欄位 → None
+  args:
+    - {"營業收入合計": {"2024": 100}}
+    - ["不存在"]
+    - "2024"
+  expected: ~
+- id: year-missing        # 欄位在、但無該年度 → None
+  args:
+    - {"營業收入合計": {"2024": 100}}
+    - ["營業收入合計"]
+    - "2023"
+  expected: ~

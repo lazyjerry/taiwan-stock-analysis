@@ -1,0 +1,26 @@
+# resolve_base_eps(data)：基準 EPS 取捨 → (eps, basis)
+# 業務邏輯：TTM eps>0 優先，否則退回最新年度年報 EPS；皆無 → ValueError
+- id: ttm-preferred
+  args:
+    - ttm: {eps: 15.5, basis: "最近四季X"}
+      years: ["2024"]
+      metrics_by_year: {"2024": {eps: 12}}
+  expected: [15.5, "TTM｜最近四季X"]
+- id: fallback-latest-annual   # ttm 為 None → 取最新年度 2024
+  args:
+    - ttm: ~
+      years: ["2023", "2024"]
+      metrics_by_year: {"2023": {eps: 8}, "2024": {eps: 12}}
+  expected: [12.0, "2024 年報 EPS"]
+- id: ttm-zero-fallback        # ttm eps=0 不算正值 → 退回年報
+  args:
+    - ttm: {eps: 0}
+      years: ["2024"]
+      metrics_by_year: {"2024": {eps: 12}}
+  expected: [12.0, "2024 年報 EPS"]
+- id: none-raises              # 無任何可用 EPS → ValueError
+  args:
+    - ttm: ~
+      years: []
+      metrics_by_year: {}
+  raises: ValueError

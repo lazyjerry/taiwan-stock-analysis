@@ -1,0 +1,26 @@
+# parse_number(value)：TWSE/TPEx 價量字串 → float 或 None
+# 業務邏輯：去逗號空白；''/--/X/除權息/除息/除權 → None；無法解析 → None
+- id: comma
+  args: ["1,234.5"]
+  expected: 1234.5
+- id: normal
+  args: ["35.60"]
+  expected: 35.6
+- id: empty
+  args: [""]
+  expected: ~
+- id: dash
+  args: ["--"]
+  expected: ~
+- id: x-mark
+  args: ["X"]
+  expected: ~
+- id: ex-dividend         # 除權息當日無價 → None
+  args: ["除權息"]
+  expected: ~
+- id: ex-rights
+  args: ["除權"]
+  expected: ~
+- id: non-numeric
+  args: ["abc"]
+  expected: ~
